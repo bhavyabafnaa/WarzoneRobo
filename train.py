@@ -90,6 +90,12 @@ def parse_args():
         default="none",
         help="Logging backend to use",
     )
+    parser.add_argument(
+        "--plot-dir",
+        type=str,
+        default=None,
+        help="Directory to save training plots",
+    )
     return parser.parse_args()
 
 
@@ -100,6 +106,9 @@ def main():
             cfg = yaml.safe_load(f)
         for k, v in cfg.items():
             setattr(args, k, v)
+
+    if args.plot_dir:
+        os.makedirs(args.plot_dir, exist_ok=True)
 
     # Set random seeds for reproducibility
     np.random.seed(args.seed)
@@ -349,7 +358,13 @@ def main():
             mean_b, std_b = evaluate_on_benchmarks(env, ppo_icm_planner_policy, "test_maps", 5)
             bench["PPO + ICM + Planner"].append(mean_b)
             if paths_plan:
-                plot_heatmap_with_path(env, paths_plan[-1])
+                heat_path = None
+                if args.plot_dir:
+                    safe_setting = setting["name"].replace(" ", "_")
+                    heat_path = os.path.join(
+                        args.plot_dir, f"heatmap_{safe_setting}_{run_seed}.pdf"
+                    )
+                plot_heatmap_with_path(env, paths_plan[-1], output_path=heat_path)
 
         # Count-based exploration
         ppo_count_policy = PPOPolicy(input_dim, action_dim)
@@ -420,10 +435,18 @@ def main():
         # Plot aggregated curves across seeds for this setting
         for name, logs_dict in curve_logs.items():
             if logs_dict["rewards"]:
+                out_file = None
+                if args.plot_dir:
+                    safe_setting = setting["name"].replace(" ", "_")
+                    safe_name = name.replace(" ", "_").replace("+", "")
+                    out_file = os.path.join(
+                        args.plot_dir, f"{safe_setting}_{safe_name}.pdf"
+                    )
                 plot_training_curves(
                     logs_dict["rewards"],
                     logs_dict["intrinsic"] if logs_dict["intrinsic"] else None,
                     logs_dict["success"],
+                    output_path=out_file,
                 )
 
         # Aggregate metrics across seeds for this setting

@@ -23,6 +23,7 @@ def plot_training_curves(
     reward_logs: list[list[float]],
     intrinsic_logs: list[list[float]] | None,
     success_logs: list[list[int]],
+    output_path: str | None = None,
 ) -> None:
     """Plot mean extrinsic/intrinsic rewards and success rate across seeds."""
 
@@ -59,10 +60,15 @@ def plot_training_curves(
     ax2.set_title("Success Rate")
 
     plt.tight_layout()
+    if output_path is not None:
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        ext = os.path.splitext(output_path)[1].lower()
+        fmt = "svg" if ext == ".svg" else "pdf"
+        plt.savefig(output_path, format=fmt)
     plt.show()
 
 
-def plot_heatmap_with_path(env, path):
+def plot_heatmap_with_path(env, path, output_path: str | None = None):
     """Display cost and risk maps with an overlayed agent path."""
     xs = [p[1] for p in path]
     ys = [p[0] for p in path]
@@ -82,6 +88,11 @@ def plot_heatmap_with_path(env, path):
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
     plt.tight_layout()
+    if output_path is not None:
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        ext = os.path.splitext(output_path)[1].lower()
+        fmt = "svg" if ext == ".svg" else "pdf"
+        plt.savefig(output_path, format=fmt)
     plt.show()
 
 
