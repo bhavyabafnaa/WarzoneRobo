@@ -5,7 +5,12 @@ import torch
 import torch.optim as optim
 import pandas as pd
 import numpy as np
-from scipy.stats import ttest_rel
+from scipy.stats import (
+    ttest_rel,
+    ttest_ind,
+    mannwhitneyu,
+    f_oneway,
+)
 
 from src.env import (
     GridWorldICM,
@@ -95,6 +100,12 @@ def parse_args():
         type=str,
         default=None,
         help="Directory to save training plots",
+    )
+    parser.add_argument(
+        "--stat-test",
+        choices=["paired", "welch", "mannwhitney", "anova"],
+        default="paired",
+        help="Statistical test for result comparisons",
     )
 
     # Parse once to read the config file path and load defaults from YAML. We
@@ -477,15 +488,36 @@ def main():
         baseline_rewards = np.array(metrics["PPO Only"]["rewards"])
         baseline_success = np.array(metrics["PPO Only"]["success"])
 
+        anova_reward_p = np.nan
+        anova_success_p = np.nan
+        if args.stat_test == "anova":
+            reward_groups = []
+            success_groups = []
+            for data in metrics.values():
+                if len(data["rewards"]) == len(baseline_rewards) and data["rewards"]:
+                    reward_groups.append(data["rewards"])
+                    success_groups.append(data["success"])
+            if len(reward_groups) >= 3:
+                anova_reward_p = f_oneway(*reward_groups).pvalue
+                anova_success_p = f_oneway(*success_groups).pvalue
+
         results = []
         for name, data in metrics.items():
-            # paired t-tests relative to PPO Only baseline
-            if name == "PPO Only" or len(baseline_rewards) != len(data["rewards"]):
+            if args.stat_test == "anova":
+                p_reward = anova_reward_p
+                p_success = anova_success_p
+            elif name == "PPO Only" or len(baseline_rewards) != len(data["rewards"]):
                 p_reward = np.nan
                 p_success = np.nan
-            else:
+            elif args.stat_test == "paired":
                 p_reward = ttest_rel(baseline_rewards, data["rewards"]).pvalue
                 p_success = ttest_rel(baseline_success, data["success"]).pvalue
+            elif args.stat_test == "welch":
+                p_reward = ttest_ind(baseline_rewards, data["rewards"], equal_var=False).pvalue
+                p_success = ttest_ind(baseline_success, data["success"], equal_var=False).pvalue
+            else:  # mannwhitney
+                p_reward = mannwhitneyu(baseline_rewards, data["rewards"], alternative="two-sided").pvalue
+                p_success = mannwhitneyu(baseline_success, data["success"], alternative="two-sided").pvalue
 
             results.append(
                 {

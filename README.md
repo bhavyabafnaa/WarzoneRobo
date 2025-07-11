@@ -63,8 +63,10 @@ python train.py --num_episodes 200
 # CSV and HTML tables are written to the `results/` folder
 ```
 
-Paired t-tests are performed against the PPO baseline for each variant.
-Differences are considered significant when `p < 0.05`.
+Use `--stat-test` to choose the statistical test applied to the aggregated
+results. Available options are `paired`, `welch`, `mannwhitney` and `anova`. The
+default is a paired t-test against the PPO baseline. P-values below `0.05`
+are marked with `*` in the table and those below `0.01` with `**`.
 
 ## Components
 * **PPO** – The main reinforcement learning algorithm used to learn policies from environment interaction.
