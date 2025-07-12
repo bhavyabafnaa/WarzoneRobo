@@ -238,6 +238,8 @@ def main():
         }
 
         for run_seed in seeds:
+            np.random.seed(run_seed)
+            torch.manual_seed(run_seed)
             env.reset(seed=run_seed)
             icm = ICMModule(input_dim, action_dim)
             planner = SymbolicPlanner(
