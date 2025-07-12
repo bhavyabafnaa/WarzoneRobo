@@ -124,7 +124,14 @@ def generate_results_table(df: pd.DataFrame, output_path: str) -> None:
     df.to_csv(csv_path, index=False)
 
     if ext.lower() in {".html", ".htm"}:
-        styled = df.style.hide_index().format(precision=2)
+        # ``hide_index`` was removed in newer versions of pandas in favour of
+        # ``hide``. Use whichever is available for compatibility across
+        # different pandas releases.
+        styled = df.style.format(precision=2)
+        if hasattr(styled, "hide_index"):
+            styled = styled.hide_index()
+        else:
+            styled = styled.hide(axis="index")
         styled.to_html(output_path)
     elif ext.lower() in {".tex", ".latex"}:
         latex = df.to_latex(index=False, float_format="%.2f")
