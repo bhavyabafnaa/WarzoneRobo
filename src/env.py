@@ -17,6 +17,7 @@ class GridWorldICM:
         dynamic_cost: bool = False,
         reward_clip: Tuple[float, float] = (-10, 100),
         max_steps: int = 100,
+        survival_reward: float = 0.0,
         seed: int | None = None,
     ) -> None:
         self.grid_size = grid_size
@@ -24,6 +25,7 @@ class GridWorldICM:
         self.dynamic_cost = dynamic_cost
         self.reward_clip = reward_clip
         self.max_steps = max_steps
+        self.survival_reward = survival_reward
         self.seed(seed)
         self.reset()
 
@@ -136,7 +138,7 @@ class GridWorldICM:
         cost = np.clip(self.cost_map[x][y], 0, 1)
         risk = np.clip(self.risk_map[x][y], 0, 1)
 
-        reward = -cost - risk
+        reward = self.survival_reward - cost - risk
         terrain = self.terrain_map[x][y]
         if terrain == "mud":
             reward -= 0.2 * terrain_decay

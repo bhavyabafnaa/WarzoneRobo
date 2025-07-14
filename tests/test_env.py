@@ -42,3 +42,14 @@ def test_dynamic_cost_updates_near_mines_and_decay():
     assert env.cost_map[0, 0] < 1.0
     # cost near the mine should increase
     assert env.cost_map[1, 1] > 0
+
+
+def test_survival_reward_positive():
+    env = GridWorldICM(grid_size=2, max_steps=5, survival_reward=0.05)
+    env.reset()
+    env.cost_map = np.zeros((2, 2))
+    env.risk_map = np.zeros((2, 2))
+    env.mine_map = np.zeros((2, 2), dtype=bool)
+    env.enemy_positions = []
+    _, reward, _, _, _ = env.step(1)
+    assert reward > 0
