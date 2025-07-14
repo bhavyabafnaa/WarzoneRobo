@@ -57,7 +57,6 @@ def parse_args():
     parser.add_argument("--num_episodes", type=int, default=500)
     parser.add_argument("--cost_weight", type=float, default=2.0)
     parser.add_argument("--risk_weight", type=float, default=3.0)
-    parser.add_argument("--goal_weight", type=float, default=0.5)
     parser.add_argument("--revisit_penalty", type=float, default=1.0)
     parser.add_argument("--dynamic_risk", action="store_true", help="Enable dynamic risk in env")
     parser.add_argument("--dynamic_cost", action="store_true", help="Enable dynamic cost in env")
