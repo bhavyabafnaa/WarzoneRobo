@@ -253,227 +253,227 @@ def main():
                 revisit_penalty=args.revisit_penalty,
             )
 
-        # PPO only
-        print("Training PPO Only")
-        ppo_policy = PPOPolicy(input_dim, action_dim)
-        opt_ppo = optim.Adam(ppo_policy.parameters(), lr=3e-4)
-        rewards_ppo_only, intrinsic_ppo_only, _, _, paths_ppo_only, _, success_ppo_only, planner_rate_ppo_only = train_agent(
-            env,
-            ppo_policy,
-            icm,
-            planner,
-            opt_ppo,
-            opt_ppo,
-            use_icm=False,
-            use_planner=False,
-            num_episodes=args.num_episodes,
-            planner_weights=planner_weights,
-            seed=run_seed,
-            add_noise=args.add_noise,
-            logger=logger,
-        )
-        metrics["PPO Only"]["rewards"].append(float(np.mean(rewards_ppo_only)))
-        metrics["PPO Only"]["success"].append(
-            float(sum(success_ppo_only)) / len(success_ppo_only) if success_ppo_only else 0.0
-        )
-        metrics["PPO Only"]["planner_pct"].append(float(np.mean(planner_rate_ppo_only)))
-        metrics["PPO Only"]["spikes"].append(count_intrinsic_spikes(intrinsic_ppo_only))
-        save_model(ppo_policy, os.path.join("checkpoints", f"ppo_only_{run_seed}.pt"))
-        curve_logs["PPO Only"]["rewards"].append(rewards_ppo_only)
-        curve_logs["PPO Only"]["success"].append(success_ppo_only)
-        render_episode_video(env, ppo_policy, os.path.join("videos", f"ppo_only_{run_seed}.gif"))
-        mean_b, std_b = evaluate_on_benchmarks(env, ppo_policy, "test_maps", 5)
-        bench["PPO Only"].append(mean_b)
-
-        # PPO + ICM
-        if not args.disable_icm:
-            print("Training PPO + ICM")
-            ppo_icm_policy = PPOPolicy(input_dim, action_dim)
-            opt_icm_policy = optim.Adam(ppo_icm_policy.parameters(), lr=3e-4)
-            rewards_ppo_icm, intrinsic_icm, _, _, paths_icm, _, success_icm, planner_rate_icm = train_agent(
-            env,
-            ppo_icm_policy,
-            icm,
-            planner,
-            opt_icm_policy,
-            opt_icm_policy,
-            use_icm=True,
-            use_planner=False,
-            num_episodes=args.num_episodes,
-            planner_weights=planner_weights,
-            seed=run_seed,
-            add_noise=args.add_noise,
-            logger=logger,
-        )
-            metrics["PPO + ICM"]["rewards"].append(float(np.mean(rewards_ppo_icm)))
-            metrics["PPO + ICM"]["success"].append(
-                float(sum(success_icm)) / len(success_icm) if success_icm else 0.0
-            )
-            metrics["PPO + ICM"]["planner_pct"].append(float(np.mean(planner_rate_icm)))
-            metrics["PPO + ICM"]["spikes"].append(count_intrinsic_spikes(intrinsic_icm))
-            save_model(ppo_icm_policy, os.path.join("checkpoints", f"ppo_icm_{run_seed}.pt"), icm=icm)
-            curve_logs["PPO + ICM"]["rewards"].append(rewards_ppo_icm)
-            curve_logs["PPO + ICM"]["intrinsic"].append(intrinsic_icm)
-            curve_logs["PPO + ICM"]["success"].append(success_icm)
-            render_episode_video(env, ppo_icm_policy, os.path.join("videos", f"ppo_icm_{run_seed}.gif"))
-            mean_b, std_b = evaluate_on_benchmarks(env, ppo_icm_policy, "test_maps", 5)
-            bench["PPO + ICM"].append(mean_b)
-
-        # PPO + Pseudo-count exploration
-        print("Training PPO + PC")
-        ppo_pc_policy = PPOPolicy(input_dim, action_dim)
-        opt_pc_policy = optim.Adam(ppo_pc_policy.parameters(), lr=3e-4)
-        pseudo = PseudoCountExploration()
-        rewards_pc, intrinsic_pc, _, _, paths_pc, _, success_pc, planner_rate_pc = train_agent(
-            env,
-            ppo_pc_policy,
-            icm,
-            planner,
-            opt_pc_policy,
-            opt_pc_policy,
-            use_icm="pseudo",
-            use_planner=False,
-            pseudo=pseudo,
-            num_episodes=args.num_episodes,
-            planner_weights=planner_weights,
-            seed=run_seed,
-            add_noise=args.add_noise,
-            logger=logger,
-        )
-        metrics["PPO + PC"]["rewards"].append(float(np.mean(rewards_pc)))
-        metrics["PPO + PC"]["success"].append(
-            float(sum(success_pc)) / len(success_pc) if success_pc else 0.0
-        )
-        metrics["PPO + PC"]["planner_pct"].append(float(np.mean(planner_rate_pc)))
-        metrics["PPO + PC"]["spikes"].append(count_intrinsic_spikes(intrinsic_pc))
-        save_model(ppo_pc_policy, os.path.join("checkpoints", f"ppo_pc_{run_seed}.pt"))
-        curve_logs["PPO + PC"]["rewards"].append(rewards_pc)
-        curve_logs["PPO + PC"]["success"].append(success_pc)
-        render_episode_video(env, ppo_pc_policy, os.path.join("videos", f"ppo_pc_{run_seed}.gif"))
-        mean_b, std_b = evaluate_on_benchmarks(env, ppo_pc_policy, "test_maps", 5)
-        bench["PPO + PC"].append(mean_b)
-
-        # PPO + ICM + Planner
-        if not args.disable_icm and not args.disable_planner:
-            print("Training PPO + ICM + Planner")
-            ppo_icm_planner_policy = PPOPolicy(input_dim, action_dim)
-            opt_plan_policy = optim.Adam(ppo_icm_planner_policy.parameters(), lr=3e-4)
-            rewards_ppo_icm_plan, intrinsic_plan, _, _, paths_plan, _, success_plan, planner_rate_plan = train_agent(
+            # PPO only
+            print("Training PPO Only")
+            ppo_policy = PPOPolicy(input_dim, action_dim)
+            opt_ppo = optim.Adam(ppo_policy.parameters(), lr=3e-4)
+            rewards_ppo_only, intrinsic_ppo_only, _, _, paths_ppo_only, _, success_ppo_only, planner_rate_ppo_only = train_agent(
                 env,
-                ppo_icm_planner_policy,
+                ppo_policy,
                 icm,
                 planner,
-                opt_plan_policy,
-                opt_plan_policy,
-                use_icm=True,
-                use_planner=True,
-                num_episodes=args.num_episodes,
-                planner_weights=planner_weights,
-                seed=run_seed,
-                add_noise=args.add_noise,
-                logger=logger,
-            )
-            metrics["PPO + ICM + Planner"]["rewards"].append(float(np.mean(rewards_ppo_icm_plan)))
-            metrics["PPO + ICM + Planner"]["success"].append(
-                float(sum(success_plan)) / len(success_plan) if success_plan else 0.0
-            )
-            metrics["PPO + ICM + Planner"]["planner_pct"].append(float(np.mean(planner_rate_plan)))
-            metrics["PPO + ICM + Planner"]["spikes"].append(count_intrinsic_spikes(intrinsic_plan))
-            save_model(
-                ppo_icm_planner_policy,
-                os.path.join("checkpoints", f"ppo_icm_planner_{run_seed}.pt"),
-                icm=icm,
-            )
-            curve_logs["PPO + ICM + Planner"]["rewards"].append(rewards_ppo_icm_plan)
-            curve_logs["PPO + ICM + Planner"]["intrinsic"].append(intrinsic_plan)
-            curve_logs["PPO + ICM + Planner"]["success"].append(success_plan)
-            render_episode_video(
-                env,
-                ppo_icm_planner_policy,
-                os.path.join("videos", f"ppo_icm_planner_{run_seed}.gif"),
-            )
-            mean_b, std_b = evaluate_on_benchmarks(env, ppo_icm_planner_policy, "test_maps", 5)
-            bench["PPO + ICM + Planner"].append(mean_b)
-            if paths_plan:
-                heat_path = None
-                if args.plot_dir:
-                    safe_setting = setting["name"].replace(" ", "_")
-                    heat_path = os.path.join(
-                        args.plot_dir, f"heatmap_{safe_setting}_{run_seed}.pdf"
-                    )
-                plot_heatmap_with_path(env, paths_plan[-1], output_path=heat_path)
-
-        # Count-based exploration
-        print("Training PPO + count")
-        ppo_count_policy = PPOPolicy(input_dim, action_dim)
-        opt_count_policy = optim.Adam(ppo_count_policy.parameters(), lr=3e-4)
-        rewards_ppo_count, intrinsic_count, _, _, paths_count, _, success_count, planner_rate_count = train_agent(
-            env,
-            ppo_count_policy,
-            icm,
-            planner,
-            opt_count_policy,
-            opt_count_policy,
-            use_icm="count",
-            use_planner=False,
-            num_episodes=args.num_episodes,
-            planner_weights=planner_weights,
-            seed=run_seed,
-            add_noise=args.add_noise,
-            logger=logger,
-        )
-        metrics["PPO + count"]["rewards"].append(float(np.mean(rewards_ppo_count)))
-        metrics["PPO + count"]["success"].append(
-            float(sum(success_count)) / len(success_count) if success_count else 0.0
-        )
-        metrics["PPO + count"]["planner_pct"].append(float(np.mean(planner_rate_count)))
-        metrics["PPO + count"]["spikes"].append(count_intrinsic_spikes(intrinsic_count))
-        save_model(ppo_count_policy, os.path.join("checkpoints", f"ppo_count_{run_seed}.pt"))
-        curve_logs["PPO + count"]["rewards"].append(rewards_ppo_count)
-        curve_logs["PPO + count"]["success"].append(success_count)
-        render_episode_video(env, ppo_count_policy, os.path.join("videos", f"ppo_count_{run_seed}.gif"))
-        mean_b, std_b = evaluate_on_benchmarks(env, ppo_count_policy, "test_maps", 5)
-        bench["PPO + count"].append(mean_b)
-
-        # RND exploration
-        if not args.disable_rnd:
-            print("Training PPO + RND")
-            ppo_rnd_policy = PPOPolicy(input_dim, action_dim)
-            opt_rnd_policy = optim.Adam(ppo_rnd_policy.parameters(), lr=3e-4)
-            rnd = RNDModule(input_dim)
-            opt_rnd = optim.Adam(rnd.predictor.parameters(), lr=1e-3)
-            rewards_ppo_rnd, intrinsic_rnd, _, _, paths_rnd, _, success_rnd, planner_rate_rnd = train_agent(
-                env,
-                ppo_rnd_policy,
-                icm,
-                planner,
-                opt_rnd_policy,
-                opt_rnd,
-                use_icm="rnd",
+                opt_ppo,
+                opt_ppo,
+                use_icm=False,
                 use_planner=False,
-                rnd=rnd,
                 num_episodes=args.num_episodes,
                 planner_weights=planner_weights,
                 seed=run_seed,
                 add_noise=args.add_noise,
                 logger=logger,
             )
-            metrics["PPO + RND"]["rewards"].append(float(np.mean(rewards_ppo_rnd)))
-            metrics["PPO + RND"]["success"].append(
-                float(sum(success_rnd)) / len(success_rnd) if success_rnd else 0.0
+            metrics["PPO Only"]["rewards"].append(float(np.mean(rewards_ppo_only)))
+            metrics["PPO Only"]["success"].append(
+                float(sum(success_ppo_only)) / len(success_ppo_only) if success_ppo_only else 0.0
             )
-            metrics["PPO + RND"]["planner_pct"].append(float(np.mean(planner_rate_rnd)))
-            metrics["PPO + RND"]["spikes"].append(count_intrinsic_spikes(intrinsic_rnd))
-            save_model(
-                ppo_rnd_policy,
-                os.path.join("checkpoints", f"ppo_rnd_{run_seed}.pt"),
-                rnd=rnd,
+            metrics["PPO Only"]["planner_pct"].append(float(np.mean(planner_rate_ppo_only)))
+            metrics["PPO Only"]["spikes"].append(count_intrinsic_spikes(intrinsic_ppo_only))
+            save_model(ppo_policy, os.path.join("checkpoints", f"ppo_only_{run_seed}.pt"))
+            curve_logs["PPO Only"]["rewards"].append(rewards_ppo_only)
+            curve_logs["PPO Only"]["success"].append(success_ppo_only)
+            render_episode_video(env, ppo_policy, os.path.join("videos", f"ppo_only_{run_seed}.gif"))
+            mean_b, std_b = evaluate_on_benchmarks(env, ppo_policy, "test_maps", 5)
+            bench["PPO Only"].append(mean_b)
+
+            # PPO + ICM
+            if not args.disable_icm:
+                print("Training PPO + ICM")
+                ppo_icm_policy = PPOPolicy(input_dim, action_dim)
+                opt_icm_policy = optim.Adam(ppo_icm_policy.parameters(), lr=3e-4)
+                rewards_ppo_icm, intrinsic_icm, _, _, paths_icm, _, success_icm, planner_rate_icm = train_agent(
+                    env,
+                    ppo_icm_policy,
+                    icm,
+                    planner,
+                    opt_icm_policy,
+                    opt_icm_policy,
+                    use_icm=True,
+                    use_planner=False,
+                    num_episodes=args.num_episodes,
+                    planner_weights=planner_weights,
+                    seed=run_seed,
+                    add_noise=args.add_noise,
+                    logger=logger,
+                )
+                metrics["PPO + ICM"]["rewards"].append(float(np.mean(rewards_ppo_icm)))
+                metrics["PPO + ICM"]["success"].append(
+                    float(sum(success_icm)) / len(success_icm) if success_icm else 0.0
+                )
+                metrics["PPO + ICM"]["planner_pct"].append(float(np.mean(planner_rate_icm)))
+                metrics["PPO + ICM"]["spikes"].append(count_intrinsic_spikes(intrinsic_icm))
+                save_model(ppo_icm_policy, os.path.join("checkpoints", f"ppo_icm_{run_seed}.pt"), icm=icm)
+                curve_logs["PPO + ICM"]["rewards"].append(rewards_ppo_icm)
+                curve_logs["PPO + ICM"]["intrinsic"].append(intrinsic_icm)
+                curve_logs["PPO + ICM"]["success"].append(success_icm)
+                render_episode_video(env, ppo_icm_policy, os.path.join("videos", f"ppo_icm_{run_seed}.gif"))
+                mean_b, std_b = evaluate_on_benchmarks(env, ppo_icm_policy, "test_maps", 5)
+                bench["PPO + ICM"].append(mean_b)
+
+            # PPO + Pseudo-count exploration
+            print("Training PPO + PC")
+            ppo_pc_policy = PPOPolicy(input_dim, action_dim)
+            opt_pc_policy = optim.Adam(ppo_pc_policy.parameters(), lr=3e-4)
+            pseudo = PseudoCountExploration()
+            rewards_pc, intrinsic_pc, _, _, paths_pc, _, success_pc, planner_rate_pc = train_agent(
+                env,
+                ppo_pc_policy,
+                icm,
+                planner,
+                opt_pc_policy,
+                opt_pc_policy,
+                use_icm="pseudo",
+                use_planner=False,
+                pseudo=pseudo,
+                num_episodes=args.num_episodes,
+                planner_weights=planner_weights,
+                seed=run_seed,
+                add_noise=args.add_noise,
+                logger=logger,
             )
-            curve_logs["PPO + RND"]["rewards"].append(rewards_ppo_rnd)
-            curve_logs["PPO + RND"]["success"].append(success_rnd)
-            render_episode_video(env, ppo_rnd_policy, os.path.join("videos", f"ppo_rnd_{run_seed}.gif"))
-            mean_b, std_b = evaluate_on_benchmarks(env, ppo_rnd_policy, "test_maps", 5)
-        bench["PPO + RND"].append(mean_b)
+            metrics["PPO + PC"]["rewards"].append(float(np.mean(rewards_pc)))
+            metrics["PPO + PC"]["success"].append(
+                float(sum(success_pc)) / len(success_pc) if success_pc else 0.0
+            )
+            metrics["PPO + PC"]["planner_pct"].append(float(np.mean(planner_rate_pc)))
+            metrics["PPO + PC"]["spikes"].append(count_intrinsic_spikes(intrinsic_pc))
+            save_model(ppo_pc_policy, os.path.join("checkpoints", f"ppo_pc_{run_seed}.pt"))
+            curve_logs["PPO + PC"]["rewards"].append(rewards_pc)
+            curve_logs["PPO + PC"]["success"].append(success_pc)
+            render_episode_video(env, ppo_pc_policy, os.path.join("videos", f"ppo_pc_{run_seed}.gif"))
+            mean_b, std_b = evaluate_on_benchmarks(env, ppo_pc_policy, "test_maps", 5)
+            bench["PPO + PC"].append(mean_b)
+
+            # PPO + ICM + Planner
+            if not args.disable_icm and not args.disable_planner:
+                print("Training PPO + ICM + Planner")
+                ppo_icm_planner_policy = PPOPolicy(input_dim, action_dim)
+                opt_plan_policy = optim.Adam(ppo_icm_planner_policy.parameters(), lr=3e-4)
+                rewards_ppo_icm_plan, intrinsic_plan, _, _, paths_plan, _, success_plan, planner_rate_plan = train_agent(
+                    env,
+                    ppo_icm_planner_policy,
+                    icm,
+                    planner,
+                    opt_plan_policy,
+                    opt_plan_policy,
+                    use_icm=True,
+                    use_planner=True,
+                    num_episodes=args.num_episodes,
+                    planner_weights=planner_weights,
+                    seed=run_seed,
+                    add_noise=args.add_noise,
+                    logger=logger,
+                )
+                metrics["PPO + ICM + Planner"]["rewards"].append(float(np.mean(rewards_ppo_icm_plan)))
+                metrics["PPO + ICM + Planner"]["success"].append(
+                    float(sum(success_plan)) / len(success_plan) if success_plan else 0.0
+                )
+                metrics["PPO + ICM + Planner"]["planner_pct"].append(float(np.mean(planner_rate_plan)))
+                metrics["PPO + ICM + Planner"]["spikes"].append(count_intrinsic_spikes(intrinsic_plan))
+                save_model(
+                    ppo_icm_planner_policy,
+                    os.path.join("checkpoints", f"ppo_icm_planner_{run_seed}.pt"),
+                    icm=icm,
+                )
+                curve_logs["PPO + ICM + Planner"]["rewards"].append(rewards_ppo_icm_plan)
+                curve_logs["PPO + ICM + Planner"]["intrinsic"].append(intrinsic_plan)
+                curve_logs["PPO + ICM + Planner"]["success"].append(success_plan)
+                render_episode_video(
+                    env,
+                    ppo_icm_planner_policy,
+                    os.path.join("videos", f"ppo_icm_planner_{run_seed}.gif"),
+                )
+                mean_b, std_b = evaluate_on_benchmarks(env, ppo_icm_planner_policy, "test_maps", 5)
+                bench["PPO + ICM + Planner"].append(mean_b)
+                if paths_plan:
+                    heat_path = None
+                    if args.plot_dir:
+                        safe_setting = setting["name"].replace(" ", "_")
+                        heat_path = os.path.join(
+                            args.plot_dir, f"heatmap_{safe_setting}_{run_seed}.pdf"
+                        )
+                    plot_heatmap_with_path(env, paths_plan[-1], output_path=heat_path)
+
+            # Count-based exploration
+            print("Training PPO + count")
+            ppo_count_policy = PPOPolicy(input_dim, action_dim)
+            opt_count_policy = optim.Adam(ppo_count_policy.parameters(), lr=3e-4)
+            rewards_ppo_count, intrinsic_count, _, _, paths_count, _, success_count, planner_rate_count = train_agent(
+                env,
+                ppo_count_policy,
+                icm,
+                planner,
+                opt_count_policy,
+                opt_count_policy,
+                use_icm="count",
+                use_planner=False,
+                num_episodes=args.num_episodes,
+                planner_weights=planner_weights,
+                seed=run_seed,
+                add_noise=args.add_noise,
+                logger=logger,
+            )
+            metrics["PPO + count"]["rewards"].append(float(np.mean(rewards_ppo_count)))
+            metrics["PPO + count"]["success"].append(
+                float(sum(success_count)) / len(success_count) if success_count else 0.0
+            )
+            metrics["PPO + count"]["planner_pct"].append(float(np.mean(planner_rate_count)))
+            metrics["PPO + count"]["spikes"].append(count_intrinsic_spikes(intrinsic_count))
+            save_model(ppo_count_policy, os.path.join("checkpoints", f"ppo_count_{run_seed}.pt"))
+            curve_logs["PPO + count"]["rewards"].append(rewards_ppo_count)
+            curve_logs["PPO + count"]["success"].append(success_count)
+            render_episode_video(env, ppo_count_policy, os.path.join("videos", f"ppo_count_{run_seed}.gif"))
+            mean_b, std_b = evaluate_on_benchmarks(env, ppo_count_policy, "test_maps", 5)
+            bench["PPO + count"].append(mean_b)
+
+            # RND exploration
+            if not args.disable_rnd:
+                print("Training PPO + RND")
+                ppo_rnd_policy = PPOPolicy(input_dim, action_dim)
+                opt_rnd_policy = optim.Adam(ppo_rnd_policy.parameters(), lr=3e-4)
+                rnd = RNDModule(input_dim)
+                opt_rnd = optim.Adam(rnd.predictor.parameters(), lr=1e-3)
+                rewards_ppo_rnd, intrinsic_rnd, _, _, paths_rnd, _, success_rnd, planner_rate_rnd = train_agent(
+                    env,
+                    ppo_rnd_policy,
+                    icm,
+                    planner,
+                    opt_rnd_policy,
+                    opt_rnd,
+                    use_icm="rnd",
+                    use_planner=False,
+                    rnd=rnd,
+                    num_episodes=args.num_episodes,
+                    planner_weights=planner_weights,
+                    seed=run_seed,
+                    add_noise=args.add_noise,
+                    logger=logger,
+                )
+                metrics["PPO + RND"]["rewards"].append(float(np.mean(rewards_ppo_rnd)))
+                metrics["PPO + RND"]["success"].append(
+                    float(sum(success_rnd)) / len(success_rnd) if success_rnd else 0.0
+                )
+                metrics["PPO + RND"]["planner_pct"].append(float(np.mean(planner_rate_rnd)))
+                metrics["PPO + RND"]["spikes"].append(count_intrinsic_spikes(intrinsic_rnd))
+                save_model(
+                    ppo_rnd_policy,
+                    os.path.join("checkpoints", f"ppo_rnd_{run_seed}.pt"),
+                    rnd=rnd,
+                )
+                curve_logs["PPO + RND"]["rewards"].append(rewards_ppo_rnd)
+                curve_logs["PPO + RND"]["success"].append(success_rnd)
+                render_episode_video(env, ppo_rnd_policy, os.path.join("videos", f"ppo_rnd_{run_seed}.gif"))
+                mean_b, std_b = evaluate_on_benchmarks(env, ppo_rnd_policy, "test_maps", 5)
+            bench["PPO + RND"].append(mean_b)
 
         # Plot aggregated curves across seeds for this setting
         for name, logs_dict in curve_logs.items():
