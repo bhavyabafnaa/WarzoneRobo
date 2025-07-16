@@ -61,6 +61,7 @@ def train_agent(
     seed: int = 42,
     add_noise: bool = False,
     logger=None,
+    initial_bonus: float = 0.5,
 ):
 
     reward_log = []
@@ -72,6 +73,8 @@ def train_agent(
     step_counts = []
     success_flags = []
     planner_usage_rate = []
+
+    initial_bonus = max(0.1, float(initial_bonus))
 
     benchmark_map = "maps/map_00.npz"
     os.makedirs(os.path.dirname(benchmark_map), exist_ok=True)
@@ -108,6 +111,7 @@ def train_agent(
         intrinsic_log = 0
         extrinsic_log = 0
         visit_count = np.zeros((env.grid_size, env.grid_size))
+        planner_bonus = max(0.1, initial_bonus * (1 - (episode / num_episodes)))
 
         while not done:
             state_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
@@ -143,7 +147,7 @@ def train_agent(
             count_reward = 1.0 / np.sqrt(visit_count[x][y])
 
             if used_planner and env.risk_map[env.agent_pos[0]][env.agent_pos[1]] < 0.5:
-                ext_reward += 0.5
+                ext_reward += planner_bonus
 
             next_tensor = torch.tensor(next_obs, dtype=torch.float32).unsqueeze(0)
             action_tensor = torch.tensor([action])
