@@ -54,6 +54,7 @@ def train_agent(
     use_planner=True,
     num_episodes: int = 500,
     beta: float = 0.1,
+    final_beta: Optional[float] = None,
     gamma: float = 0.99,
     planner_weights: Optional[dict] = None,
     rnd: Optional[RNDModule] = None,
@@ -63,6 +64,13 @@ def train_agent(
     logger=None,
     initial_bonus: float = 0.5,
 ):
+    """Train a PPO agent with optional curiosity and planning.
+
+    The ``beta`` parameter controls the strength of the intrinsic reward.
+    When ``final_beta`` is provided its value linearly decays from ``beta`` to
+    ``final_beta`` over the first two thirds of training episodes and then
+    remains constant for the rest of training.
+    """
 
     reward_log = []
     paths_log = []
@@ -113,6 +121,13 @@ def train_agent(
         visit_count = np.zeros((env.grid_size, env.grid_size))
         planner_bonus = max(0.1, initial_bonus * (1 - (episode / num_episodes)))
 
+        if final_beta is not None:
+            decay_end = max(1, int(num_episodes * 2 / 3))
+            progress = min(episode, decay_end) / decay_end
+            beta_val = max(final_beta, beta - (beta - final_beta) * progress)
+        else:
+            beta_val = beta
+
         while not done:
             state_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
             risk = env.risk_map[env.agent_pos[0]][env.agent_pos[1]]
@@ -153,11 +168,11 @@ def train_agent(
             action_tensor = torch.tensor([action])
 
             if use_icm == "count":
-                total_reward = ext_reward + beta * count_reward
+                total_reward = ext_reward + beta_val * count_reward
                 curiosity = torch.tensor([count_reward])
             elif use_icm == "rnd" and rnd is not None:
                 r_int, pred, target = rnd(state_tensor)
-                total_reward = ext_reward + beta * r_int.item()
+                total_reward = ext_reward + beta_val * r_int.item()
                 curiosity = r_int
                 loss = F.mse_loss(pred, target.detach())
                 optimizer_icm.zero_grad()
@@ -165,11 +180,11 @@ def train_agent(
                 optimizer_icm.step()
             elif use_icm == "pseudo" and pseudo is not None:
                 p_bonus = pseudo.bonus(state_tensor.numpy())
-                total_reward = ext_reward + beta * p_bonus
+                total_reward = ext_reward + beta_val * p_bonus
                 curiosity = torch.tensor([p_bonus])
             elif use_icm is True:
                 curiosity, f_loss, i_loss = icm(state_tensor, next_tensor, action_tensor)
-                total_reward = ext_reward + beta * curiosity.item()
+                total_reward = ext_reward + beta_val * curiosity.item()
                 icm_loss = f_loss + i_loss
                 optimizer_icm.zero_grad()
                 icm_loss.backward()
