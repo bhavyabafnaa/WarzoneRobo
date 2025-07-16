@@ -76,6 +76,7 @@ are marked with `*` in the table and those below `0.01` with `**`.
 * **ICM** – Adds intrinsic rewards based on prediction error of the agent's dynamics model to promote exploring unseen states.
 * **RND** – Provides exploration bonuses by comparing a fixed random network with a trained predictor network.
 * **Planner** – A symbolic planner computes heuristic paths that the agent can follow, helping integrate classical planning with learned policies.
+* A decaying planner bonus starts high and linearly decreases each episode so the agent transitions from planner guidance to independent action.
 
 The notebook experiments with different combinations of these components to evaluate their effect on success rate and exploration.
 
