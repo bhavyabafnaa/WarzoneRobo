@@ -58,6 +58,18 @@ def parse_args():
     parser.add_argument("--cost_weight", type=float, default=2.0)
     parser.add_argument("--risk_weight", type=float, default=3.0)
     parser.add_argument("--revisit_penalty", type=float, default=1.0)
+    parser.add_argument(
+        "--initial-beta",
+        type=float,
+        default=0.1,
+        help="Starting weight for intrinsic reward",
+    )
+    parser.add_argument(
+        "--final-beta",
+        type=float,
+        default=None,
+        help="Final beta value after decay (defaults to initial value)",
+    )
     parser.add_argument("--dynamic_risk", action="store_true", help="Enable dynamic risk in env")
     parser.add_argument("--dynamic_cost", action="store_true", help="Enable dynamic cost in env")
     parser.add_argument("--add_noise", action="store_true", help="Add noise when resetting maps")
@@ -263,6 +275,8 @@ def main():
                 use_icm=False,
                 use_planner=False,
                 num_episodes=args.num_episodes,
+                beta=args.initial_beta,
+                final_beta=args.final_beta,
                 planner_weights=planner_weights,
                 seed=run_seed,
                 add_noise=args.add_noise,
@@ -296,6 +310,8 @@ def main():
                     use_icm=True,
                     use_planner=False,
                     num_episodes=args.num_episodes,
+                    beta=args.initial_beta,
+                    final_beta=args.final_beta,
                     planner_weights=planner_weights,
                     seed=run_seed,
                     add_noise=args.add_noise,
@@ -331,6 +347,8 @@ def main():
                 use_planner=False,
                 pseudo=pseudo,
                 num_episodes=args.num_episodes,
+                beta=args.initial_beta,
+                final_beta=args.final_beta,
                 planner_weights=planner_weights,
                 seed=run_seed,
                 add_noise=args.add_noise,
@@ -364,6 +382,8 @@ def main():
                     use_icm=True,
                     use_planner=True,
                     num_episodes=args.num_episodes,
+                    beta=args.initial_beta,
+                    final_beta=args.final_beta,
                     planner_weights=planner_weights,
                     seed=run_seed,
                     add_noise=args.add_noise,
@@ -413,6 +433,8 @@ def main():
                 use_icm="count",
                 use_planner=False,
                 num_episodes=args.num_episodes,
+                beta=args.initial_beta,
+                final_beta=args.final_beta,
                 planner_weights=planner_weights,
                 seed=run_seed,
                 add_noise=args.add_noise,
@@ -449,6 +471,8 @@ def main():
                     use_planner=False,
                     rnd=rnd,
                     num_episodes=args.num_episodes,
+                    beta=args.initial_beta,
+                    final_beta=args.final_beta,
                     planner_weights=planner_weights,
                     seed=run_seed,
                     add_noise=args.add_noise,
