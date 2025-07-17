@@ -1,5 +1,5 @@
 import os
-for d in ["videos", "results", "plots", "figures", "checkpoints", "logs", "outputs"]:
+for d in ["videos", "results", "figures", "checkpoints"]:
     os.makedirs(d, exist_ok=True)
 import argparse
 import yaml
