@@ -95,7 +95,7 @@ Train all models from a configuration file:
 ```bash
 python train.py --config configs/default.yaml
 ```
-Checkpoints are saved under `checkpoints/`, episode videos under `videos/`, and result tables under `results/`. Hyperparameters such as planner weights (`cost_weight`, `risk_weight`, etc.) can be edited in the YAML file or passed as command-line flags. The `seed` value in `configs/default.yaml` initializes both NumPy and PyTorch and turns on deterministic CuDNN settings so runs are reproducible.
+Checkpoints are saved under `checkpoints/`, episode videos under `videos/`, and result tables under `results/`. GIF files use the active setting as a prefix, for example `baseline_ppo_only_0.gif`. Hyperparameters such as planner weights (`cost_weight`, `risk_weight`, etc.) can be edited in the YAML file or passed as command-line flags. The `seed` value in `configs/default.yaml` initializes both NumPy and PyTorch and turns on deterministic CuDNN settings so runs are reproducible.
 Use `--plot-dir figures/` to save training plots such as reward curves and heatmaps. The directory is created automatically.
 
 Specify `--initial-beta` and `--final-beta` to linearly decay the curiosity
