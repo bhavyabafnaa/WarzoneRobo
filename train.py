@@ -314,6 +314,7 @@ def main():
         }
 
         for run_seed in seeds:
+            safe_setting = setting["name"].replace(" ", "_")
             np.random.seed(run_seed)
             torch.manual_seed(run_seed)
             env.reset(seed=run_seed)
@@ -375,8 +376,11 @@ def main():
             curve_logs["PPO Only"]["rewards"].append(rewards_ppo_only)
             curve_logs["PPO Only"]["success"].append(success_ppo_only)
             render_episode_video(
-                env, ppo_policy, os.path.join(
-                    "videos", f"ppo_only_{run_seed}.gif"))
+                env,
+                ppo_policy,
+                os.path.join(
+                    "videos", f"{safe_setting}_ppo_only_{run_seed}.gif"),
+            )
             mean_b, std_b = evaluate_on_benchmarks(
                 env, ppo_policy, "test_maps", 5)
             bench["PPO Only"].append(mean_b)
@@ -434,8 +438,11 @@ def main():
                 curve_logs["PPO + ICM"]["intrinsic"].append(intrinsic_icm)
                 curve_logs["PPO + ICM"]["success"].append(success_icm)
                 render_episode_video(
-                    env, ppo_icm_policy, os.path.join(
-                        "videos", f"ppo_icm_{run_seed}.gif"))
+                    env,
+                    ppo_icm_policy,
+                    os.path.join(
+                        "videos", f"{safe_setting}_ppo_icm_{run_seed}.gif"),
+                )
                 mean_b, std_b = evaluate_on_benchmarks(
                     env, ppo_icm_policy, "test_maps", 5)
                 bench["PPO + ICM"].append(mean_b)
@@ -488,8 +495,11 @@ def main():
             curve_logs["PPO + PC"]["rewards"].append(rewards_pc)
             curve_logs["PPO + PC"]["success"].append(success_pc)
             render_episode_video(
-                env, ppo_pc_policy, os.path.join(
-                    "videos", f"ppo_pc_{run_seed}.gif"))
+                env,
+                ppo_pc_policy,
+                os.path.join(
+                    "videos", f"{safe_setting}_ppo_pc_{run_seed}.gif"),
+            )
             mean_b, std_b = evaluate_on_benchmarks(
                 env, ppo_pc_policy, "test_maps", 5)
             bench["PPO + PC"].append(mean_b)
@@ -553,7 +563,9 @@ def main():
                 render_episode_video(
                     env,
                     ppo_icm_planner_policy,
-                    os.path.join("videos", f"ppo_icm_planner_{run_seed}.gif"),
+                    os.path.join(
+                        "videos", f"{safe_setting}_ppo_icm_planner_{run_seed}.gif"
+                    ),
                 )
                 mean_b, std_b = evaluate_on_benchmarks(
                     env, ppo_icm_planner_policy, "test_maps", 5)
@@ -623,8 +635,11 @@ def main():
             curve_logs["PPO + count"]["rewards"].append(rewards_ppo_count)
             curve_logs["PPO + count"]["success"].append(success_count)
             render_episode_video(
-                env, ppo_count_policy, os.path.join(
-                    "videos", f"ppo_count_{run_seed}.gif"))
+                env,
+                ppo_count_policy,
+                os.path.join(
+                    "videos", f"{safe_setting}_ppo_count_{run_seed}.gif"),
+            )
             mean_b, std_b = evaluate_on_benchmarks(
                 env, ppo_count_policy, "test_maps", 5)
             bench["PPO + count"].append(mean_b)
@@ -683,8 +698,11 @@ def main():
                 curve_logs["PPO + RND"]["rewards"].append(rewards_ppo_rnd)
                 curve_logs["PPO + RND"]["success"].append(success_rnd)
                 render_episode_video(
-                    env, ppo_rnd_policy, os.path.join(
-                        "videos", f"ppo_rnd_{run_seed}.gif"))
+                    env,
+                    ppo_rnd_policy,
+                    os.path.join(
+                        "videos", f"{safe_setting}_ppo_rnd_{run_seed}.gif"),
+                )
                 mean_b, std_b = evaluate_on_benchmarks(
                     env, ppo_rnd_policy, "test_maps", 5)
             bench["PPO + RND"].append(mean_b)
