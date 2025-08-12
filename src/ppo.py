@@ -9,6 +9,7 @@ from .planner import SymbolicPlanner
 from .icm import ICMModule
 from .rnd import RNDModule
 from .pseudocount import PseudoCountExploration
+from .world_model import WorldModel, ReplayBuffer
 
 
 class PPOPolicy(nn.Module):
@@ -80,6 +81,8 @@ def train_agent(
     kappa: float = 2.0,
     H: int = 8,
     waypoint_bonus: float = 0.05,
+    imagination_k: int = 10,
+    world_model_lr: float = 1e-3,
 ):
     """Train a PPO agent with optional curiosity and planning.
 
@@ -120,6 +123,12 @@ def train_agent(
     initial_bonus = max(0.1, float(initial_bonus))
 
     lambda_val = lambda_cost
+
+    state_dim = policy.fc1.in_features
+    action_dim = policy.actor.out_features
+    world_model = WorldModel(state_dim, action_dim)
+    wm_optimizer = torch.optim.Adam(world_model.parameters(), lr=world_model_lr)
+    replay_buffer = ReplayBuffer()
 
     benchmark_map = "maps/map_00.npz"
     os.makedirs(os.path.dirname(benchmark_map), exist_ok=True)
@@ -180,6 +189,7 @@ def train_agent(
             beta_val = beta
 
         while not done:
+            prev_obs = obs.copy()
             state_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
 
             x, y = env.agent_pos
@@ -253,6 +263,37 @@ def train_agent(
                 next_obs, dtype=torch.float32).unsqueeze(0)
             action_tensor = torch.tensor([action])
 
+            # Train world model on real transition
+            replay_buffer.add(prev_obs, action, next_obs)
+            state_wm = torch.tensor(prev_obs, dtype=torch.float32).unsqueeze(0)
+            action_onehot = F.one_hot(torch.tensor([action]), num_classes=action_dim).float()
+            target_next = torch.tensor(next_obs, dtype=torch.float32).unsqueeze(0)
+            pred_next = world_model(state_wm, action_onehot)
+            wm_loss = F.mse_loss(pred_next, target_next)
+            wm_optimizer.zero_grad()
+            wm_loss.backward()
+            wm_optimizer.step()
+
+            # Imagination rollout for policy/critic update
+            if len(replay_buffer) > 0:
+                s_batch, a_batch, _ = replay_buffer.sample(imagination_k)
+                s_batch_t = torch.tensor(s_batch, dtype=torch.float32)
+                a_onehot = F.one_hot(torch.tensor(a_batch), num_classes=action_dim).float()
+                imagined_next = world_model(s_batch_t, a_onehot).detach()
+                with torch.no_grad():
+                    _, v_target, _ = policy(imagined_next)
+                    v_target = v_target.squeeze()
+                logits_imag, v_pred, _ = policy(s_batch_t)
+                dist_imag = torch.distributions.Categorical(logits=logits_imag)
+                logp_imag = dist_imag.log_prob(torch.tensor(a_batch))
+                adv_imag = (v_target - v_pred.squeeze()).detach()
+                policy_loss_model = -(logp_imag * adv_imag).mean()
+                value_loss_model = F.mse_loss(v_pred.squeeze(), v_target)
+                model_loss = policy_loss_model + value_loss_model
+                optimizer_policy.zero_grad()
+                model_loss.backward()
+                optimizer_policy.step()
+
             if use_icm == "count":
                 total_reward = ext_reward + beta_val * count_reward
                 curiosity = torch.tensor([count_reward])
@@ -293,7 +334,7 @@ def train_agent(
 
             obs_buf.append(obs)
             action_buf.append(action)
-            logprob_buf.append(logprob)
+            logprob_buf.append(logprob.detach())
             val_buf.append(value.item())
             cost_val_buf.append(value_cost.item())
             reward_buf.append(total_reward)

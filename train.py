@@ -157,6 +157,18 @@ def parse_args():
         help="Reward bonus for moving toward subgoal",
     )
     parser.add_argument(
+        "--K",
+        type=int,
+        default=10,
+        help="Number of model-based transitions per real step",
+    )
+    parser.add_argument(
+        "--world_model_lr",
+        type=float,
+        default=1e-3,
+        help="Learning rate for the world model",
+    )
+    parser.add_argument(
         "--ablation",
         action="store_true",
         help="Loop over disabling ICM, RND and the planner individually",
@@ -416,6 +428,8 @@ def main():
                 use_risk_penalty=not args.disable_risk_penalty,
                 H=args.H,
                 waypoint_bonus=args.waypoint_bonus,
+                imagination_k=args.K,
+                world_model_lr=args.world_model_lr,
             )
             metrics["PPO Only"]["rewards"].append(
                 float(np.mean(rewards_ppo_only)))
@@ -487,6 +501,8 @@ def main():
                     use_risk_penalty=not args.disable_risk_penalty,
                     H=args.H,
                     waypoint_bonus=args.waypoint_bonus,
+                    imagination_k=args.K,
+                    world_model_lr=args.world_model_lr,
                 )
                 metrics["PPO + ICM"]["rewards"].append(
                     float(np.mean(rewards_ppo_icm)))
@@ -561,6 +577,8 @@ def main():
                 use_risk_penalty=not args.disable_risk_penalty,
                 H=args.H,
                 waypoint_bonus=args.waypoint_bonus,
+                imagination_k=args.K,
+                world_model_lr=args.world_model_lr,
             )
             metrics["PPO + PC"]["rewards"].append(float(np.mean(rewards_pc)))
             metrics["PPO + PC"]["success"].append(
@@ -630,6 +648,8 @@ def main():
                     use_risk_penalty=not args.disable_risk_penalty,
                     H=args.H,
                     waypoint_bonus=args.waypoint_bonus,
+                    imagination_k=args.K,
+                    world_model_lr=args.world_model_lr,
                 )
                 metrics["PPO + ICM + Planner"]["rewards"].append(
                     float(np.mean(rewards_ppo_icm_plan)))
@@ -721,6 +741,8 @@ def main():
                 use_risk_penalty=not args.disable_risk_penalty,
                 H=args.H,
                 waypoint_bonus=args.waypoint_bonus,
+                imagination_k=args.K,
+                world_model_lr=args.world_model_lr,
             )
             metrics["PPO + count"]["rewards"].append(
                 float(np.mean(rewards_ppo_count))
@@ -797,6 +819,8 @@ def main():
                     use_risk_penalty=not args.disable_risk_penalty,
                     H=args.H,
                     waypoint_bonus=args.waypoint_bonus,
+                    imagination_k=args.K,
+                    world_model_lr=args.world_model_lr,
                 )
                 metrics["PPO + RND"]["rewards"].append(
                     float(np.mean(rewards_ppo_rnd)))
