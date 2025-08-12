@@ -19,14 +19,14 @@ def test_short_training_loop(tmp_path, budget):
 
     input_dim = 4 * env.grid_size * env.grid_size + 2
     action_dim = 4
-    runs = []
+    rewards_runs = []
     for run_seed in range(10):
         policy = PPOPolicy(input_dim, action_dim)
         icm = ICMModule(input_dim, action_dim)
         planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
         opt = optim.Adam(policy.parameters(), lr=1e-3)
 
-        train_agent(
+        metrics = train_agent(
             env,
             policy,
             icm,
@@ -43,8 +43,9 @@ def test_short_training_loop(tmp_path, budget):
             c3=0.01,
             seed=run_seed,
         )
-        runs.append(True)
-    assert len(runs) == 10
+        rewards_runs.append(metrics[0])
+    assert len(rewards_runs) == 10
+    assert all(len(r) == 1 for r in rewards_runs)
 
 
 @pytest.mark.parametrize("budget", [0.05, 0.10])
@@ -157,9 +158,9 @@ def test_success_flag_survival(tmp_path, budget):
             c2=0.5,
             c3=0.01,
         )
-
-        _, _, _, _, _, _, success_flags, *_rest = metrics
+        rewards, _, _, _, _, _, success_flags, *_rest = metrics
         assert success_flags == [1]
+        assert len(rewards) == 1
 
 
 def test_beta_schedule_consistency():
@@ -187,7 +188,8 @@ def test_beta_schedule_consistency():
         num_episodes=3,
         beta_schedule=schedule,
     )
-    beta_log1 = metrics1[-1]
+    rewards1, *_, beta_log1 = metrics1
+    assert len(rewards1) == 3
 
     env.reset()
     policy2 = PPOPolicy(input_dim, action_dim)
@@ -208,11 +210,38 @@ def test_beta_schedule_consistency():
         num_episodes=3,
         beta_schedule=schedule,
     )
-    beta_log2 = metrics2[-1]
+    rewards2, *_, beta_log2 = metrics2
+    assert len(rewards2) == 3
 
     assert beta_log1 == schedule
     assert beta_log2 == schedule
     assert beta_log1 == beta_log2
+
+
+def test_allow_early_stop_asserts():
+    env = GridWorldICM(grid_size=2, max_steps=2)
+    os.makedirs("maps", exist_ok=True)
+    env.save_map("maps/map_00.npz")
+    input_dim = 4 * env.grid_size * env.grid_size + 2
+    action_dim = 4
+    policy = PPOPolicy(input_dim, action_dim)
+    icm = ICMModule(input_dim, action_dim)
+    planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
+    opt = optim.Adam(policy.parameters(), lr=1e-3)
+
+    with pytest.raises(AssertionError):
+        train_agent(
+            env,
+            policy,
+            icm,
+            planner,
+            opt,
+            opt,
+            use_icm=False,
+            use_planner=False,
+            num_episodes=1,
+            allow_early_stop=True,
+        )
 
 
 def test_reward_ci_warning():
