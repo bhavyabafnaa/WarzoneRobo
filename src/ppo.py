@@ -1,4 +1,5 @@
 import os
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -109,6 +110,7 @@ def train_agent(
     if waypoint_bonus > 0:
         use_icm = False
 
+    start_time = time.time()
     reward_log = []
     paths_log = []
     planner_usage = []
@@ -126,6 +128,9 @@ def train_agent(
     episode_costs = []
     violation_flags = []
     first_violation_episode = None
+    episode_times = []
+    steps_per_sec_log = []
+    wall_clock_times = []
 
     initial_bonus = max(0.1, float(initial_bonus))
 
@@ -144,6 +149,7 @@ def train_agent(
         env.save_map(benchmark_map)
 
     for episode in range(num_episodes):
+        episode_start = time.time()
         obs, _ = env.reset(
             seed=seed, load_map_path=benchmark_map, add_noise=add_noise)
         g = planner.get_subgoal(env.agent_pos, H)
@@ -442,6 +448,13 @@ def train_agent(
         min_dist_val = min_dist if min_dist < float('inf') else env.grid_size * 2
         min_dist_log.append(min_dist_val)
 
+        elapsed = time.time() - episode_start
+        steps_per_sec = step_count / elapsed if elapsed > 0 else 0.0
+        total_elapsed = time.time() - start_time
+        episode_times.append(elapsed)
+        steps_per_sec_log.append(steps_per_sec)
+        wall_clock_times.append(total_elapsed)
+
         success_rate = np.mean(success_flags)
         if logger is not None:
             if hasattr(logger, "add_scalar"):
@@ -455,6 +468,9 @@ def train_agent(
                 logger.add_scalar("adherence_rate", adherence_rate, episode)
                 logger.add_scalar("coverage", coverage, episode)
                 logger.add_scalar("min_enemy_dist", min_dist_val, episode)
+                logger.add_scalar("episode_time", elapsed, episode)
+                logger.add_scalar("steps_per_sec", steps_per_sec, episode)
+                logger.add_scalar("wall_time", total_elapsed, episode)
                 logger.add_scalar(
                     "first_violation_episode",
                     first_violation_episode if first_violation_episode is not None else num_episodes,
@@ -473,6 +489,9 @@ def train_agent(
                     "adherence_rate": adherence_rate,
                     "coverage": coverage,
                     "min_enemy_dist": min_dist_val,
+                        "episode_time": elapsed,
+                        "steps_per_sec": steps_per_sec,
+                        "wall_time": total_elapsed,
                         "first_violation_episode": (
                             first_violation_episode if first_violation_episode is not None else num_episodes
                         ),
@@ -491,7 +510,10 @@ def train_agent(
             f"Adherence: {adherence_rate:.2f} | "
             f"Coverage: {coverage} | "
             f"Success: {success_rate * 100:.1f}% | "
-            f"Lambda: {lambda_val:.2f}"
+            f"Lambda: {lambda_val:.2f} | "
+            f"SPS: {steps_per_sec:.2f} | "
+            f"Ep Time: {elapsed:.2f}s | "
+            f"Total: {total_elapsed:.2f}s"
         )
 
     if first_violation_episode is None:
@@ -514,4 +536,7 @@ def train_agent(
         episode_costs,
         violation_flags,
         first_violation_episode,
+        episode_times,
+        steps_per_sec_log,
+        wall_clock_times,
     )
