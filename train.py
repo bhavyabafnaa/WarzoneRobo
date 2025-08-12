@@ -326,6 +326,9 @@ def main():
                 "first_violation_episode": [],
                 "coverage": [],
                 "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
             },
             "PPO + ICM": {
                 "rewards": [],
@@ -339,6 +342,9 @@ def main():
                 "first_violation_episode": [],
                 "coverage": [],
                 "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
             },
             "PPO + ICM + Planner": {
                 "rewards": [],
@@ -352,6 +358,9 @@ def main():
                 "first_violation_episode": [],
                 "coverage": [],
                 "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
             },
             "PPO + count": {
                 "rewards": [],
@@ -365,6 +374,9 @@ def main():
                 "first_violation_episode": [],
                 "coverage": [],
                 "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
             },
             "PPO + RND": {
                 "rewards": [],
@@ -378,6 +390,9 @@ def main():
                 "first_violation_episode": [],
                 "coverage": [],
                 "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
             },
             "PPO + PC": {
                 "rewards": [],
@@ -391,6 +406,9 @@ def main():
                 "first_violation_episode": [],
                 "coverage": [],
                 "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
             },
         }
         bench = {
@@ -483,6 +501,9 @@ def main():
                 episode_costs_ppo_only,
                 violation_flags_ppo_only,
                 first_violation_episode_ppo_only,
+                episode_times_ppo_only,
+                steps_per_sec_ppo_only,
+                wall_clock_times_ppo_only,
             ) = train_agent(
                 env,
                 ppo_policy,
@@ -537,6 +558,12 @@ def main():
             )
             metrics["PPO Only"]["coverage"].append(
                 float(np.mean(coverage_ppo_only)))
+            metrics["PPO Only"]["episode_time"].append(
+                float(np.mean(episode_times_ppo_only)))
+            metrics["PPO Only"]["steps_per_sec"].append(
+                float(np.mean(steps_per_sec_ppo_only)))
+            metrics["PPO Only"]["wall_time"].append(
+                float(wall_clock_times_ppo_only[-1]))
             save_model(
                 ppo_policy,
                 os.path.join(
@@ -582,6 +609,9 @@ def main():
                 episode_costs_icm,
                 violation_flags_icm,
                 first_violation_episode_icm,
+                episode_times_icm,
+                steps_per_sec_icm,
+                wall_clock_times_icm,
             ) = train_agent(
                 env,
                 ppo_icm_policy,
@@ -637,6 +667,12 @@ def main():
                 )
                 metrics["PPO + ICM"]["coverage"].append(
                     float(np.mean(coverage_icm)))
+                metrics["PPO + ICM"]["episode_time"].append(
+                    float(np.mean(episode_times_icm)))
+                metrics["PPO + ICM"]["steps_per_sec"].append(
+                    float(np.mean(steps_per_sec_icm)))
+                metrics["PPO + ICM"]["wall_time"].append(
+                    float(wall_clock_times_icm[-1]))
                 save_model(
                     ppo_icm_policy,
                     os.path.join(
@@ -683,6 +719,9 @@ def main():
                 episode_costs_pc,
                 violation_flags_pc,
                 first_violation_episode_pc,
+                episode_times_pc,
+                steps_per_sec_pc,
+                wall_clock_times_pc,
             ) = train_agent(
                 env,
                 ppo_pc_policy,
@@ -736,6 +775,12 @@ def main():
             )
             metrics["PPO + PC"]["coverage"].append(
                 float(np.mean(coverage_pc)))
+            metrics["PPO + PC"]["episode_time"].append(
+                float(np.mean(episode_times_pc)))
+            metrics["PPO + PC"]["steps_per_sec"].append(
+                float(np.mean(steps_per_sec_pc)))
+            metrics["PPO + PC"]["wall_time"].append(
+                float(wall_clock_times_pc[-1]))
             save_model(
                 ppo_pc_policy,
                 os.path.join(
@@ -781,6 +826,9 @@ def main():
                     episode_costs_icm_plan,
                     violation_flags_icm_plan,
                     first_violation_episode_icm_plan,
+                    episode_times_icm_plan,
+                    steps_per_sec_icm_plan,
+                    wall_clock_times_icm_plan,
                 ) = train_agent(
                     env,
                     ppo_icm_planner_policy,
@@ -836,6 +884,12 @@ def main():
                 )
                 metrics["PPO + ICM + Planner"]["coverage"].append(
                     float(np.mean(coverage_icm_plan)))
+                metrics["PPO + ICM + Planner"]["episode_time"].append(
+                    float(np.mean(episode_times_icm_plan)))
+                metrics["PPO + ICM + Planner"]["steps_per_sec"].append(
+                    float(np.mean(steps_per_sec_icm_plan)))
+                metrics["PPO + ICM + Planner"]["wall_time"].append(
+                    float(wall_clock_times_icm_plan[-1]))
                 save_model(
                     ppo_icm_planner_policy,
                     os.path.join(
@@ -900,6 +954,9 @@ def main():
                 episode_costs_count,
                 violation_flags_count,
                 first_violation_episode_count,
+                episode_times_count,
+                steps_per_sec_count,
+                wall_clock_times_count,
             ) = train_agent(
                 env,
                 ppo_count_policy,
@@ -956,6 +1013,12 @@ def main():
             )
             metrics["PPO + count"]["coverage"].append(
                 float(np.mean(coverage_count)))
+            metrics["PPO + count"]["episode_time"].append(
+                float(np.mean(episode_times_count)))
+            metrics["PPO + count"]["steps_per_sec"].append(
+                float(np.mean(steps_per_sec_count)))
+            metrics["PPO + count"]["wall_time"].append(
+                float(wall_clock_times_count[-1]))
             save_model(
                 ppo_count_policy,
                 os.path.join(
@@ -1003,6 +1066,9 @@ def main():
                     episode_costs_rnd,
                     violation_flags_rnd,
                     first_violation_episode_rnd,
+                    episode_times_rnd,
+                    steps_per_sec_rnd,
+                    wall_clock_times_rnd,
                 ) = train_agent(
                     env,
                     ppo_rnd_policy,
@@ -1059,6 +1125,12 @@ def main():
                 )
                 metrics["PPO + RND"]["coverage"].append(
                     float(np.mean(coverage_rnd)))
+                metrics["PPO + RND"]["episode_time"].append(
+                    float(np.mean(episode_times_rnd)))
+                metrics["PPO + RND"]["steps_per_sec"].append(
+                    float(np.mean(steps_per_sec_rnd)))
+                metrics["PPO + RND"]["wall_time"].append(
+                    float(wall_clock_times_rnd[-1]))
                 save_model(
                     ppo_rnd_policy,
                     os.path.join("checkpoints", f"ppo_rnd_{run_seed}.pt"),
@@ -1184,6 +1256,34 @@ def main():
                 else 0.0
             )
 
+            episode_time_vals = data["episode_time"]
+            episode_time_mean = (
+                float(np.mean(episode_time_vals)) if episode_time_vals else 0.0
+            )
+            episode_time_ci = (
+                1.96 * float(np.std(episode_time_vals, ddof=1)) / np.sqrt(len(episode_time_vals))
+                if len(episode_time_vals) > 1
+                else 0.0
+            )
+            steps_per_sec_vals = data["steps_per_sec"]
+            steps_per_sec_mean = (
+                float(np.mean(steps_per_sec_vals)) if steps_per_sec_vals else 0.0
+            )
+            steps_per_sec_ci = (
+                1.96 * float(np.std(steps_per_sec_vals, ddof=1)) / np.sqrt(len(steps_per_sec_vals))
+                if len(steps_per_sec_vals) > 1
+                else 0.0
+            )
+            wall_time_vals = data["wall_time"]
+            wall_time_mean = (
+                float(np.mean(wall_time_vals)) if wall_time_vals else 0.0
+            )
+            wall_time_ci = (
+                1.96 * float(np.std(wall_time_vals, ddof=1)) / np.sqrt(len(wall_time_vals))
+                if len(wall_time_vals) > 1
+                else 0.0
+            )
+
             results.append(
                 {
                     "Setting": setting["name"],
@@ -1203,6 +1303,12 @@ def main():
                     "Coverage 95% CI": coverage_ci,
                     "Min Enemy Dist Mean": min_dist_mean,
                     "Min Enemy Dist 95% CI": min_dist_ci,
+                    "Episode Time Mean": episode_time_mean,
+                    "Episode Time 95% CI": episode_time_ci,
+                    "Steps/s Mean": steps_per_sec_mean,
+                    "Steps/s 95% CI": steps_per_sec_ci,
+                    "Total Time Mean": wall_time_mean,
+                    "Total Time 95% CI": wall_time_ci,
                     "Intrinsic Spikes": (
                         float(np.mean(data["spikes"]))
                         if data["spikes"]

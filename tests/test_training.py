@@ -89,11 +89,17 @@ def test_training_one_episode_metrics(tmp_path):
         episode_costs,
         violation_flags,
         first_violation_episode,
+        episode_times,
+        steps_per_sec,
+        wall_clock,
     ) = metrics
     assert len(rewards) == 1
     assert len(coverage_log) == 1
     assert len(episode_costs) == 1
     assert len(violation_flags) == 1
+    assert len(episode_times) == 1
+    assert len(steps_per_sec) == 1
+    assert len(wall_clock) == 1
     assert isinstance(first_violation_episode, int)
 
 
@@ -131,5 +137,5 @@ def test_success_flag_survival(tmp_path):
         c3=0.01,
     )
 
-    _, _, _, _, _, _, success_flags, _, _, _, _, _, _, _, _, _ = metrics
+    _, _, _, _, _, _, success_flags, *_rest = metrics
     assert success_flags == [1]
