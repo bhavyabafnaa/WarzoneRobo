@@ -323,6 +323,7 @@ def main():
                 "episode_costs": [],
                 "violation_flags": [],
                 "first_violation_episode": [],
+                "coverage": [],
             },
             "PPO + ICM": {
                 "rewards": [],
@@ -333,6 +334,7 @@ def main():
                 "episode_costs": [],
                 "violation_flags": [],
                 "first_violation_episode": [],
+                "coverage": [],
             },
             "PPO + ICM + Planner": {
                 "rewards": [],
@@ -343,6 +345,7 @@ def main():
                 "episode_costs": [],
                 "violation_flags": [],
                 "first_violation_episode": [],
+                "coverage": [],
             },
             "PPO + count": {
                 "rewards": [],
@@ -353,6 +356,7 @@ def main():
                 "episode_costs": [],
                 "violation_flags": [],
                 "first_violation_episode": [],
+                "coverage": [],
             },
             "PPO + RND": {
                 "rewards": [],
@@ -363,6 +367,7 @@ def main():
                 "episode_costs": [],
                 "violation_flags": [],
                 "first_violation_episode": [],
+                "coverage": [],
             },
             "PPO + PC": {
                 "rewards": [],
@@ -373,6 +378,7 @@ def main():
                 "episode_costs": [],
                 "violation_flags": [],
                 "first_violation_episode": [],
+                "coverage": [],
             },
         }
         bench = {
@@ -459,6 +465,7 @@ def main():
                 planner_rate_ppo_only,
                 mask_counts_ppo_only,
                 mask_rates_ppo_only,
+                coverage_ppo_only,
                 episode_costs_ppo_only,
                 violation_flags_ppo_only,
                 first_violation_episode_ppo_only,
@@ -510,6 +517,8 @@ def main():
             metrics["PPO Only"]["first_violation_episode"].append(
                 first_violation_episode_ppo_only
             )
+            metrics["PPO Only"]["coverage"].append(
+                float(np.mean(coverage_ppo_only)))
             save_model(
                 ppo_policy,
                 os.path.join(
@@ -547,16 +556,17 @@ def main():
                     _,
                     success_icm,
                     planner_rate_icm,
-                    mask_counts_icm,
-                    mask_rates_icm,
-                    episode_costs_icm,
-                    violation_flags_icm,
-                    first_violation_episode_icm,
-                ) = train_agent(
-                    env,
-                    ppo_icm_policy,
-                    icm,
-                    planner,
+                mask_counts_icm,
+                mask_rates_icm,
+                coverage_icm,
+                episode_costs_icm,
+                violation_flags_icm,
+                first_violation_episode_icm,
+            ) = train_agent(
+                env,
+                ppo_icm_policy,
+                icm,
+                planner,
                     opt_icm_policy,
                     opt_icm_policy,
                     use_icm=True,
@@ -601,6 +611,8 @@ def main():
                 metrics["PPO + ICM"]["first_violation_episode"].append(
                     first_violation_episode_icm
                 )
+                metrics["PPO + ICM"]["coverage"].append(
+                    float(np.mean(coverage_icm)))
                 save_model(
                     ppo_icm_policy,
                     os.path.join(
@@ -641,6 +653,7 @@ def main():
                 planner_rate_pc,
                 mask_counts_pc,
                 mask_rates_pc,
+                coverage_pc,
                 episode_costs_pc,
                 violation_flags_pc,
                 first_violation_episode_pc,
@@ -691,6 +704,8 @@ def main():
             metrics["PPO + PC"]["first_violation_episode"].append(
                 first_violation_episode_pc
             )
+            metrics["PPO + PC"]["coverage"].append(
+                float(np.mean(coverage_pc)))
             save_model(
                 ppo_pc_policy,
                 os.path.join(
@@ -730,6 +745,7 @@ def main():
                     planner_rate_plan,
                     mask_counts_icm_plan,
                     mask_rates_icm_plan,
+                    coverage_icm_plan,
                     episode_costs_icm_plan,
                     violation_flags_icm_plan,
                     first_violation_episode_icm_plan,
@@ -782,6 +798,8 @@ def main():
                 metrics["PPO + ICM + Planner"]["first_violation_episode"].append(
                     first_violation_episode_icm_plan
                 )
+                metrics["PPO + ICM + Planner"]["coverage"].append(
+                    float(np.mean(coverage_icm_plan)))
                 save_model(
                     ppo_icm_planner_policy,
                     os.path.join(
@@ -840,6 +858,7 @@ def main():
                 planner_rate_count,
                 mask_counts_count,
                 mask_rates_count,
+                coverage_count,
                 episode_costs_count,
                 violation_flags_count,
                 first_violation_episode_count,
@@ -893,6 +912,8 @@ def main():
             metrics["PPO + count"]["first_violation_episode"].append(
                 first_violation_episode_count
             )
+            metrics["PPO + count"]["coverage"].append(
+                float(np.mean(coverage_count)))
             save_model(
                 ppo_count_policy,
                 os.path.join(
@@ -934,6 +955,7 @@ def main():
                     planner_rate_rnd,
                     mask_counts_rnd,
                     mask_rates_rnd,
+                    coverage_rnd,
                     episode_costs_rnd,
                     violation_flags_rnd,
                     first_violation_episode_rnd,
@@ -987,6 +1009,8 @@ def main():
                 metrics["PPO + RND"]["first_violation_episode"].append(
                     first_violation_episode_rnd
                 )
+                metrics["PPO + RND"]["coverage"].append(
+                    float(np.mean(coverage_rnd)))
                 save_model(
                     ppo_rnd_policy,
                     os.path.join("checkpoints", f"ppo_rnd_{run_seed}.pt"),
@@ -1090,6 +1114,13 @@ def main():
                 if len(mask_vals) > 1
                 else 0.0
             )
+            coverage_vals = data["coverage"]
+            coverage_mean = float(np.mean(coverage_vals)) if coverage_vals else 0.0
+            coverage_ci = (
+                1.96 * float(np.std(coverage_vals, ddof=1)) / np.sqrt(len(coverage_vals))
+                if len(coverage_vals) > 1
+                else 0.0
+            )
 
             results.append(
                 {
@@ -1104,6 +1135,8 @@ def main():
                     ) * 100,
                     "Mask Rate Mean": mask_rate_mean,
                     "Mask Rate 95% CI": mask_rate_ci,
+                    "Coverage Mean": coverage_mean,
+                    "Coverage 95% CI": coverage_ci,
                     "Intrinsic Spikes": (
                         float(np.mean(data["spikes"]))
                         if data["spikes"]
