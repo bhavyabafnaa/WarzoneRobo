@@ -106,6 +106,7 @@ def train_agent(
     waypoint_bonus: float = 0.05,
     imagination_k: int = 10,
     world_model_lr: float = 1e-3,
+    allow_early_stop: bool = False,
 ):
     """Train a PPO agent with optional curiosity and planning.
 
@@ -131,6 +132,10 @@ def train_agent(
 
     if waypoint_bonus > 0:
         use_icm = False
+
+    assert not allow_early_stop, (
+        "allow_early_stop must remain False during experiments to prevent premature termination"
+    )
 
     start_time = time.time()
     reward_log = []
@@ -414,11 +419,11 @@ def train_agent(
         cost_advantages = compute_gae(cost_buf, cost_val_buf, gamma=gamma, lam=0.95)
 
         adv_tensor = torch.tensor(advantages, dtype=torch.float32)
-        adv_tensor = (adv_tensor - adv_tensor.mean()) / \
-            (adv_tensor.std() + 1e-8)
+        adv_std = adv_tensor.std(unbiased=False)
+        adv_tensor = (adv_tensor - adv_tensor.mean()) / (adv_std + 1e-8)
         cost_adv_tensor = torch.tensor(cost_advantages, dtype=torch.float32)
-        cost_adv_tensor = (cost_adv_tensor - cost_adv_tensor.mean()) / \
-            (cost_adv_tensor.std() + 1e-8)
+        cost_std = cost_adv_tensor.std(unbiased=False)
+        cost_adv_tensor = (cost_adv_tensor - cost_adv_tensor.mean()) / (cost_std + 1e-8)
 
         obs_tensor = torch.tensor(np.array(obs_buf), dtype=torch.float32)
         action_tensor = torch.tensor(action_buf)
