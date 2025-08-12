@@ -120,6 +120,7 @@ def train_agent(
     planner_usage_rate = []
     mask_counts = []
     mask_rates = []
+    coverage_log = []
     episode_costs = []
     violation_flags = []
     first_violation_episode = None
@@ -418,6 +419,8 @@ def train_agent(
         mask_counts.append(mask_count)
         mask_rate = mask_count / max(step_count, 1)
         mask_rates.append(mask_rate)
+        coverage = int(np.count_nonzero(visit_count))
+        coverage_log.append(coverage)
 
         success_rate = np.mean(success_flags)
         if logger is not None:
@@ -429,6 +432,7 @@ def train_agent(
                 logger.add_scalar("episode_cost", Jc, episode)
                 logger.add_scalar("constraint_violation", violation_flag, episode)
                 logger.add_scalar("mask_rate", mask_rate, episode)
+                logger.add_scalar("coverage", coverage, episode)
                 logger.add_scalar(
                     "first_violation_episode",
                     first_violation_episode if first_violation_episode is not None else num_episodes,
@@ -444,6 +448,7 @@ def train_agent(
                         "episode_cost": Jc,
                         "constraint_violation": violation_flag,
                         "mask_rate": mask_rate,
+                        "coverage": coverage,
                         "first_violation_episode": (
                             first_violation_episode if first_violation_episode is not None else num_episodes
                         ),
@@ -459,6 +464,7 @@ def train_agent(
             f"Planner: {planner_decisions} | "
             f"Masks: {mask_count} | "
             f"Mask Rate: {mask_rate:.2f} | "
+            f"Coverage: {coverage} | "
             f"Success: {success_rate * 100:.1f}% | "
             f"Lambda: {lambda_val:.2f}"
         )
@@ -477,6 +483,7 @@ def train_agent(
         planner_usage_rate,
         mask_counts,
         mask_rates,
+        coverage_log,
         episode_costs,
         violation_flags,
         first_violation_episode,
