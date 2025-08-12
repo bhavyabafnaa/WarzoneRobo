@@ -16,3 +16,5 @@ seed: 42  # used for numpy and torch; enables deterministic CUDNN
 tau: 0.6
 H: 8
 waypoint_bonus: 0.05
+K: 10
+world_model_lr: 0.001
