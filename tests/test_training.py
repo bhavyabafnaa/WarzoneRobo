@@ -72,27 +72,53 @@ def test_training_one_episode_metrics(tmp_path):
         c2=cfg.get("c2", 0.5),
         c3=cfg.get("c3", 0.01),
     )
-    (
-        rewards,
-        _,
-        _,
-        _,
-        _,
-        _,
-        success_flags,
-        _,
-        _,
-        _,
-        _,
-        coverage_log,
-        _,
-        episode_costs,
-        violation_flags,
-        first_violation_episode,
-        episode_times,
-        steps_per_sec,
-        wall_clock,
-    ) = metrics
+
+    if len(metrics) == 19:
+        (
+            rewards,
+            _,
+            _,
+            _,
+            _,
+            _,
+            success_flags,
+            _,
+            _,
+            _,
+            _,
+            coverage_log,
+            _,
+            episode_costs,
+            violation_flags,
+            first_violation_episode,
+            episode_times,
+            steps_per_sec,
+            wall_clock,
+        ) = metrics
+        lambda_log = [0.0] * len(rewards)
+    else:
+        (
+            rewards,
+            _,
+            _,
+            _,
+            _,
+            _,
+            success_flags,
+            _,
+            _,
+            _,
+            _,
+            coverage_log,
+            _,
+            episode_costs,
+            violation_flags,
+            lambda_log,
+            first_violation_episode,
+            episode_times,
+            steps_per_sec,
+            wall_clock,
+        ) = metrics
     assert len(rewards) == 1
     assert len(coverage_log) == 1
     assert len(episode_costs) == 1
@@ -100,6 +126,7 @@ def test_training_one_episode_metrics(tmp_path):
     assert len(episode_times) == 1
     assert len(steps_per_sec) == 1
     assert len(wall_clock) == 1
+    assert len(lambda_log) == 1
     assert isinstance(first_violation_episode, int)
 
 
