@@ -70,6 +70,8 @@ def train_agent(
     initial_bonus: float = 0.5,
     reset_env: bool = True,
     lambda_cost: float = 1.0,
+    eta_lambda: float = 0.01,
+    d: float = 1.0,
     c1: float = 0.5,
     c2: float = 0.5,
     c3: float = 0.01,
@@ -100,6 +102,8 @@ def train_agent(
     planner_usage_rate = []
 
     initial_bonus = max(0.1, float(initial_bonus))
+
+    lambda_val = lambda_cost
 
     benchmark_map = "maps/map_00.npz"
     os.makedirs(os.path.dirname(benchmark_map), exist_ok=True)
@@ -281,7 +285,7 @@ def train_agent(
         entropy_mean = entropy.mean()
 
         total_loss = (
-            -(l_reward - lambda_cost * l_cost)
+            -(l_reward - lambda_val * l_cost)
             + c1 * v_reward_loss
             + c2 * v_cost_loss
             - c3 * entropy_mean
@@ -289,6 +293,9 @@ def train_agent(
         optimizer_policy.zero_grad()
         total_loss.backward()
         optimizer_policy.step()
+
+        Jc = sum(cost_buf)
+        lambda_val = max(0.0, lambda_val + eta_lambda * (Jc - d))
 
         if episode % 50 == 0:
             paths_log.append(agent_path)
@@ -314,12 +321,14 @@ def train_agent(
                 logger.add_scalar("reward", total_ext_reward, episode)
                 logger.add_scalar("intrinsic_reward", intrinsic_log, episode)
                 logger.add_scalar("success_rate", success_rate, episode)
+                logger.add_scalar("lambda_val", lambda_val, episode)
             elif hasattr(logger, "log"):
                 logger.log(
                     {
                         "reward": total_ext_reward,
                         "intrinsic_reward": intrinsic_log,
                         "success_rate": success_rate,
+                        "lambda_val": lambda_val,
                         "episode": episode,
                     }
                 )
@@ -330,7 +339,8 @@ def train_agent(
             f"Steps: {step_count} | "
             f"PPO: {ppo_decisions} | "
             f"Planner: {planner_decisions} | "
-            f"Success: {success_rate * 100:.1f}%"
+            f"Success: {success_rate * 100:.1f}% | "
+            f"Lambda: {lambda_val:.2f}"
         )
 
     return (
