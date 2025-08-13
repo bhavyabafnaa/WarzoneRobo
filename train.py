@@ -359,14 +359,14 @@ def parse_args():
     parser.add_argument(
         "--tau",
         type=float,
-        default=0.6,
+        default=0.7,
         help="Risk threshold for masking unsafe actions",
     )
     parser.add_argument(
         "--kappa",
         type=float,
         choices=[2, 4],
-        default=2.0,
+        default=4.0,
         help="Soft risk penalty weight applied to policy logits",
     )
     parser.add_argument(
