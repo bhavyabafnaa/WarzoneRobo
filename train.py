@@ -29,6 +29,7 @@ from src.visualization import (
     plot_learning_panels,
     plot_pareto,
     plot_heatmap_with_path,
+    plot_coverage_heatmap,
     generate_results_table,
     render_episode_video,
     plot_violation_rate,
@@ -224,6 +225,56 @@ def evaluate_policy_on_maps(
         rewards.append(total_reward)
         successes.append(1 if step_count >= env.max_steps and alive else 0)
     return rewards, successes
+
+
+def compute_visit_counts_on_map(
+    env: GridWorldICM, policy: PPOPolicy, map_path: str, H: int
+) -> np.ndarray:
+    """Run ``policy`` on ``map_path`` once and return state visit counts."""
+
+    obs, _ = env.reset(load_map_path=map_path)
+    planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
+    g = planner.get_subgoal(env.agent_pos, H)
+    subgoal_timer = H
+    dx, dy = g[0] - env.agent_pos[0], g[1] - env.agent_pos[1]
+    obs = np.concatenate([obs, np.array([dx, dy], dtype=np.float32)])
+    counts = np.zeros((env.grid_size, env.grid_size), dtype=np.int32)
+    counts[tuple(env.agent_pos)] += 1
+    done = False
+    while not done:
+        state_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+        action, _, _, _ = policy.act(state_tensor)
+        obs_base, _rew, _cost, done, _trunc, _info = env.step(action)
+        subgoal_timer -= 1
+        if subgoal_timer <= 0 or tuple(env.agent_pos) == g:
+            g = planner.get_subgoal(env.agent_pos, H)
+            subgoal_timer = H
+        dx, dy = g[0] - env.agent_pos[0], g[1] - env.agent_pos[1]
+        obs = np.concatenate([obs_base, np.array([dx, dy], dtype=np.float32)])
+        counts[tuple(env.agent_pos)] += 1
+    return counts
+
+
+def plot_policy_coverage(
+    env: GridWorldICM,
+    policy: PPOPolicy,
+    method: str,
+    setting_name: str,
+    plot_dir: str | None,
+    H: int,
+) -> None:
+    """Compute visit frequencies for a map and plot a coverage heatmap."""
+
+    map_path = "test_maps/map_00.npz"
+    counts = compute_visit_counts_on_map(env, policy, map_path, H)
+    out_file = None
+    if plot_dir:
+        safe_setting = setting_name.replace(" ", "_")
+        safe_name = method.replace(" ", "_")
+        out_file = os.path.join(
+            plot_dir, f"{safe_setting}_{safe_name}_coverage.pdf"
+        )
+    plot_coverage_heatmap(counts, output_path=out_file)
 
 
 def get_paired_arrays(
@@ -841,6 +892,14 @@ def run(args):
             metrics["PPO Only"]["rewards"][run_seed] = rewards_b
             metrics["PPO Only"]["success"][run_seed] = success_b
             bench["PPO Only"].append(float(np.mean(rewards_b)))
+            plot_policy_coverage(
+                env,
+                ppo_policy,
+                "PPO Only",
+                setting["name"],
+                plot_dir,
+                args.H,
+            )
 
             # PPO + ICM
             if not args.disable_icm:
@@ -946,6 +1005,14 @@ def run(args):
                 metrics["PPO + ICM"]["rewards"][run_seed] = rewards_b
                 metrics["PPO + ICM"]["success"][run_seed] = success_b
                 bench["PPO + ICM"].append(float(np.mean(rewards_b)))
+                plot_policy_coverage(
+                    env,
+                    ppo_icm_policy,
+                    "PPO + ICM",
+                    setting["name"],
+                    plot_dir,
+                    args.H,
+                )
 
             # PPO + Pseudo-count exploration
             print("Training PPO + PC")
@@ -1049,6 +1116,14 @@ def run(args):
             metrics["PPO + PC"]["rewards"][run_seed] = rewards_b
             metrics["PPO + PC"]["success"][run_seed] = success_b
             bench["PPO + PC"].append(float(np.mean(rewards_b)))
+            plot_policy_coverage(
+                env,
+                ppo_pc_policy,
+                "PPO + PC",
+                setting["name"],
+                plot_dir,
+                args.H,
+            )
 
             # PPO + ICM + Planner
             if not args.disable_icm and not args.disable_planner:
@@ -1159,6 +1234,14 @@ def run(args):
                 metrics["PPO + ICM + Planner"]["rewards"][run_seed] = rewards_b
                 metrics["PPO + ICM + Planner"]["success"][run_seed] = success_b
                 bench["PPO + ICM + Planner"].append(float(np.mean(rewards_b)))
+                plot_policy_coverage(
+                    env,
+                    ppo_icm_planner_policy,
+                    "PPO + ICM + Planner",
+                    setting["name"],
+                    plot_dir,
+                    args.H,
+                )
                 if paths_plan:
                     heat_path = None
                     if plot_dir:
@@ -1274,6 +1357,14 @@ def run(args):
             metrics["PPO + count"]["rewards"][run_seed] = rewards_b
             metrics["PPO + count"]["success"][run_seed] = success_b
             bench["PPO + count"].append(float(np.mean(rewards_b)))
+            plot_policy_coverage(
+                env,
+                ppo_count_policy,
+                "PPO + count",
+                setting["name"],
+                plot_dir,
+                args.H,
+            )
 
             # RND exploration
             if not args.disable_rnd:
@@ -1380,6 +1471,14 @@ def run(args):
                 metrics["PPO + RND"]["rewards"][run_seed] = rewards_b
                 metrics["PPO + RND"]["success"][run_seed] = success_b
                 bench["PPO + RND"].append(float(np.mean(rewards_b)))
+                plot_policy_coverage(
+                    env,
+                    ppo_rnd_policy,
+                    "PPO + RND",
+                    setting["name"],
+                    plot_dir,
+                    args.H,
+                )
 
         # Plot aggregated curves across seeds for all methods
         panel_logs: dict[str, dict[str, list[list[float]]]] = {}

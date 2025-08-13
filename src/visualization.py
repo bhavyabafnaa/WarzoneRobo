@@ -64,6 +64,31 @@ def plot_training_curves(
     plt.show()
 
 
+def plot_coverage_heatmap(visit_counts: np.ndarray, output_path: str | None = None) -> None:
+    """Visualize state visit frequencies as a normalized heatmap."""
+
+    data = np.asarray(visit_counts, dtype=float)
+    if data.ndim != 2:
+        raise ValueError("visit_counts must be a 2D array")
+    if data.max() > 0:
+        data = data / data.max()
+
+    sns.set(style="darkgrid")
+    fig, ax = plt.subplots(figsize=(5, 5))
+    im = ax.imshow(data, origin="lower", cmap="viridis")
+    ax.set_title("Visit Frequency")
+    ax.set_xlabel("Y")
+    ax.set_ylabel("X")
+    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    plt.tight_layout()
+    if output_path is not None:
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        ext = os.path.splitext(output_path)[1].lower()
+        fmt = "svg" if ext == ".svg" else "pdf"
+        plt.savefig(output_path, format=fmt)
+    plt.show()
+
+
 def plot_violation_rate(logs: list[list[float]] | None, output_path: str | None = None) -> None:
     """Plot running constraint violation probability with 95% CIs.
 
