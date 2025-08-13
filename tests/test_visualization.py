@@ -3,7 +3,12 @@ import pandas as pd
 
 from src.env import GridWorldICM
 from src.ppo import PPOPolicy
-from src.visualization import render_episode_video, plot_pareto, plot_learning_panels
+from src.visualization import (
+    render_episode_video,
+    plot_pareto,
+    plot_learning_panels,
+    plot_violation_rate,
+)
 
 
 def test_render_episode_video(tmp_path):
@@ -42,4 +47,11 @@ def test_plot_learning_panels(tmp_path):
     }
     output = tmp_path / "panels.pdf"
     plot_learning_panels(logs, str(output))
+    assert output.exists()
+
+
+def test_plot_violation_rate(tmp_path):
+    logs = [[0, 1, 0, 1, 0], [0, 0, 1, 0, 0]]
+    output = tmp_path / "violation.pdf"
+    plot_violation_rate(logs, str(output))
     assert output.exists()
