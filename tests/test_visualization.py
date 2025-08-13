@@ -8,6 +8,7 @@ from src.visualization import (
     plot_pareto,
     plot_learning_panels,
     plot_violation_rate,
+    plot_coverage_heatmap,
 )
 
 
@@ -54,4 +55,11 @@ def test_plot_violation_rate(tmp_path):
     logs = [[0, 1, 0, 1, 0], [0, 0, 1, 0, 0]]
     output = tmp_path / "violation.pdf"
     plot_violation_rate(logs, str(output))
+    assert output.exists()
+
+
+def test_plot_coverage_heatmap(tmp_path):
+    counts = np.array([[0, 1], [2, 3]])
+    output = tmp_path / "coverage.pdf"
+    plot_coverage_heatmap(counts, str(output))
     assert output.exists()
