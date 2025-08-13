@@ -31,6 +31,7 @@ from src.visualization import (
     plot_heatmap_with_path,
     generate_results_table,
     render_episode_video,
+    plot_violation_rate,
 )
 from src.icm import ICMModule
 from src.rnd import RNDModule
@@ -1394,6 +1395,16 @@ def run(args):
                     metrics_to_plot["Episode Cost"] = logs_dict["episode_costs"]
                 if logs_dict["violation_flags"]:
                     metrics_to_plot["Constraint Violation"] = logs_dict["violation_flags"]
+                    safe_setting = setting["name"].replace(" ", "_")
+                    safe_name = name.replace(" ", "_")
+                    out_file_vr = None
+                    if plot_dir:
+                        out_file_vr = os.path.join(
+                            plot_dir, f"{safe_setting}_{safe_name}_violation_rate.pdf"
+                        )
+                    plot_violation_rate(
+                        logs_dict["violation_flags"], output_path=out_file_vr
+                    )
                 panel_logs[name] = metrics_to_plot
         if panel_logs:
             out_file = None
