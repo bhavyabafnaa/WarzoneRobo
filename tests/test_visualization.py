@@ -1,8 +1,9 @@
+import numpy as np
 import pandas as pd
 
 from src.env import GridWorldICM
 from src.ppo import PPOPolicy
-from src.visualization import render_episode_video, plot_pareto
+from src.visualization import render_episode_video, plot_pareto, plot_learning_panels
 
 
 def test_render_episode_video(tmp_path):
@@ -25,4 +26,20 @@ def test_plot_pareto(tmp_path):
     )
     output = tmp_path / "pareto.pdf"
     plot_pareto(df, 0.6, str(output))
+    assert output.exists()
+
+
+def test_plot_learning_panels(tmp_path):
+    logs = {
+        "MethodA": {
+            "Reward": [list(np.linspace(0, 1, 5)), list(np.linspace(0, 1, 5))],
+            "Success": [[1, 0, 1, 0, 1], [0, 1, 0, 1, 0]],
+        },
+        "MethodB": {
+            "Reward": [list(np.linspace(1, 2, 5)), list(np.linspace(1, 2, 5))],
+            "Success": [[0, 1, 1, 1, 1], [1, 0, 0, 0, 0]],
+        },
+    }
+    output = tmp_path / "panels.pdf"
+    plot_learning_panels(logs, str(output))
     assert output.exists()

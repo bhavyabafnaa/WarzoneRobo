@@ -64,6 +64,74 @@ def plot_training_curves(
     plt.show()
 
 
+def plot_learning_panels(
+    metrics_dict: dict[str, dict[str, list[list[float]]]],
+    output_path: str | None = None,
+) -> None:
+    """Plot learning curves for multiple methods and metrics.
+
+    ``metrics_dict`` should be structured as ``{method: {metric: logs}}`` where
+    ``logs`` is a list of episode-value sequences for each seed. Subplots are
+    arranged with methods as rows and metrics as columns. Shaded regions denote
+    95% confidence intervals across seeds.
+    """
+
+    if not metrics_dict:
+        return
+
+    sns.set(style="darkgrid")
+    methods = list(metrics_dict.keys())
+    metric_names = sorted({m for logs in metrics_dict.values() for m in logs})
+    n_rows = len(methods)
+    n_cols = len(metric_names)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 4 * n_rows), squeeze=False)
+
+    for i, method in enumerate(methods):
+        for j, metric in enumerate(metric_names):
+            ax = axes[i][j]
+            logs = metrics_dict[method].get(metric)
+            if not logs:
+                ax.axis("off")
+                continue
+            if logs and not isinstance(logs[0], (list, np.ndarray)):
+                logs = [logs]
+
+            if metric.lower().startswith("success"):
+                processed = [
+                    np.cumsum(flags) / (np.arange(len(flags)) + 1) for flags in logs
+                ]
+                df = _stack_logs(processed, "Value")
+                ax.set_ylim(0, 1)
+            else:
+                df = _stack_logs(logs, "Value")
+
+            sns.lineplot(
+                data=df,
+                x="Episode",
+                y="Value",
+                ax=ax,
+                errorbar=("ci", 95),
+            )
+            if i == n_rows - 1:
+                ax.set_xlabel("Episode")
+            else:
+                ax.set_xlabel("")
+            if j == 0:
+                ax.set_ylabel(method)
+            else:
+                ax.set_ylabel("")
+            if i == 0:
+                ax.set_title(metric)
+
+    plt.tight_layout()
+    if output_path is not None:
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        ext = os.path.splitext(output_path)[1].lower()
+        fmt = "svg" if ext == ".svg" else "pdf"
+        plt.savefig(output_path, format=fmt)
+    plt.show()
+
+
 def plot_pareto(
     df: pd.DataFrame, cost_limit: float, output_path: str | None = None
 ) -> None:

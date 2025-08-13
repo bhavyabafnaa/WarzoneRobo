@@ -26,7 +26,7 @@ from src.env import (
     evaluate_on_benchmarks,
 )
 from src.visualization import (
-    plot_training_curves,
+    plot_learning_panels,
     plot_pareto,
     plot_heatmap_with_path,
     generate_results_table,
@@ -1380,17 +1380,11 @@ def run(args):
                 metrics["PPO + RND"]["success"][run_seed] = success_b
                 bench["PPO + RND"].append(float(np.mean(rewards_b)))
 
-        # Plot aggregated curves across seeds for this setting
+        # Plot aggregated curves across seeds for all methods
+        panel_logs: dict[str, dict[str, list[list[float]]]] = {}
         for name, logs_dict in curve_logs.items():
             if logs_dict["rewards"]:
-                out_file = None
-                if plot_dir:
-                    safe_setting = setting["name"].replace(" ", "_")
-                    safe_name = name.replace(" ", "_").replace("+", "")
-                    out_file = os.path.join(
-                        plot_dir, f"{safe_setting}_{safe_name}.pdf"
-                    )
-                metrics_to_plot = {
+                metrics_to_plot: dict[str, list[list[float]]] = {
                     "Reward": logs_dict["rewards"],
                     "Success": logs_dict["success"],
                 }
@@ -1400,7 +1394,13 @@ def run(args):
                     metrics_to_plot["Episode Cost"] = logs_dict["episode_costs"]
                 if logs_dict["violation_flags"]:
                     metrics_to_plot["Constraint Violation"] = logs_dict["violation_flags"]
-                plot_training_curves(metrics_to_plot, output_path=out_file)
+                panel_logs[name] = metrics_to_plot
+        if panel_logs:
+            out_file = None
+            if plot_dir:
+                safe_setting = setting["name"].replace(" ", "_")
+                out_file = os.path.join(plot_dir, f"{safe_setting}_panels.pdf")
+            plot_learning_panels(panel_logs, output_path=out_file)
 
         # Aggregate metrics across seeds for this setting
         baseline_rewards = np.array(
