@@ -9,6 +9,7 @@ from src.visualization import (
     plot_learning_panels,
     plot_violation_rate,
     plot_coverage_heatmap,
+    plot_ablation_radar,
 )
 
 
@@ -62,4 +63,44 @@ def test_plot_coverage_heatmap(tmp_path):
     counts = np.array([[0, 1], [2, 3]])
     output = tmp_path / "coverage.pdf"
     plot_coverage_heatmap(counts, str(output))
+    assert output.exists()
+
+
+def test_plot_ablation_radar(tmp_path):
+    raw_metrics = {
+        "baseline": {
+            "Safety": [0.9, 0.8],
+            "Reward": [100, 110],
+            "Coverage": [50, 55],
+            "Compute": [1.0, 1.1],
+        },
+        "no_icm": {
+            "Safety": [0.7, 0.6],
+            "Reward": [80, 90],
+            "Coverage": [40, 42],
+            "Compute": [0.9, 0.95],
+        },
+        "no_rnd": {
+            "Safety": [0.75, 0.7],
+            "Reward": [85, 88],
+            "Coverage": [45, 47],
+            "Compute": [0.85, 0.9],
+        },
+    }
+
+    rows = []
+    for setting, metrics in raw_metrics.items():
+        rows.append(
+            {
+                "Setting": setting,
+                "Safety": np.mean(metrics["Safety"]),
+                "Reward": np.mean(metrics["Reward"]),
+                "Coverage": np.mean(metrics["Coverage"]),
+                "Compute": np.mean(metrics["Compute"]),
+            }
+        )
+    metrics_df = pd.DataFrame(rows)
+
+    output = tmp_path / "radar.pdf"
+    plot_ablation_radar(metrics_df, str(output))
     assert output.exists()
