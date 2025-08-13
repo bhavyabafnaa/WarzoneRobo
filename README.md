@@ -16,6 +16,22 @@ The repository includes a Jupyter notebook named `demo.ipynb` that showcases the
 # Install dependencies
 pip install -r requirements.txt
 
+These dependencies are pinned to known-good versions:
+
+- torch==2.8.0
+- numpy==2.3.2
+- matplotlib==3.10.5
+- gym==0.26.2
+- PyYAML==6.0.2
+- seaborn==0.13.2
+- pandas==2.3.1
+- imageio==2.37.0
+- scipy==1.16.1
+- statsmodels==0.14.5
+- pingouin==0.5.5
+- wandb==0.21.1
+- tensorboard==2.20.0
+
 # Launch Jupyter and open the notebook
 jupyter notebook demo.ipynb
 ```
