@@ -206,6 +206,59 @@ def plot_learning_panels(
     plt.show()
 
 
+def plot_ablation_radar(metrics_df: pd.DataFrame, output_path: str | None = None) -> None:
+    """Plot a radar chart comparing ablation metrics.
+
+    The input DataFrame should contain a ``Setting`` column identifying each
+    ablation configuration and one column for every metric to visualise
+    (e.g. ``Safety``, ``Reward``, ``Coverage`` and ``Compute``). Each metric is
+    linearly normalised to the ``[0, 1]`` range across all settings before being
+    plotted on a polar (radar) chart.
+    """
+
+    if metrics_df.empty:
+        return
+
+    categories = [c for c in metrics_df.columns if c.lower() != "setting"]
+    data = metrics_df[categories].astype(float)
+
+    # Normalise metrics to [0, 1]
+    mins = data.min()
+    maxs = data.max()
+    span = maxs - mins
+    span[span == 0] = 1.0
+    norm = (data - mins) / span
+    norm["Setting"] = metrics_df["Setting"].values
+
+    N = len(categories)
+    angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
+    angles += angles[:1]
+
+    sns.set(style="darkgrid")
+    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={"polar": True})
+
+    for _, row in norm.iterrows():
+        values = row[categories].tolist()
+        values += values[:1]
+        ax.plot(angles, values, label=row["Setting"])
+        ax.fill(angles, values, alpha=0.1)
+
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(categories)
+    ax.set_ylim(0, 1)
+    ax.set_yticklabels([])
+    ax.set_title("Ablation Comparison")
+    ax.legend(loc="upper right", bbox_to_anchor=(1.1, 1.1))
+
+    plt.tight_layout()
+    if output_path is not None:
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        ext = os.path.splitext(output_path)[1].lower()
+        fmt = "svg" if ext == ".svg" else "pdf"
+        plt.savefig(output_path, format=fmt)
+    plt.show()
+
+
 def plot_pareto(
     df: pd.DataFrame, cost_limit: float, output_path: str | None = None
 ) -> None:
