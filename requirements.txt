@@ -8,5 +8,6 @@ pandas
 imageio
 scipy
 statsmodels
+pingouin
 wandb
 tensorboard

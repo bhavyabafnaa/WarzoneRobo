@@ -13,9 +13,11 @@ from scipy.stats import (
     ttest_rel,
     ttest_ind,
     mannwhitneyu,
-    f_oneway,
+    friedmanchisquare,
 )
+from statsmodels.stats.oneway import anova_oneway
 from statsmodels.stats.multitest import multipletests
+import pingouin as pg
 
 from src.env import (
     GridWorldICM,
@@ -396,7 +398,7 @@ def parse_args():
     )
     parser.add_argument(
         "--stat-test",
-        choices=["paired", "welch", "mannwhitney", "anova"],
+        choices=["paired", "welch", "mannwhitney", "anova", "friedman"],
         default="paired",
         help="Statistical test for result comparisons",
     )
@@ -1370,8 +1372,10 @@ def run(args):
         baseline_success = np.array(
             flatten_metric(metrics["PPO Only"]["success"]))
 
-        anova_reward_p = np.nan
-        anova_success_p = np.nan
+        overall_reward_p = np.nan
+        overall_success_p = np.nan
+        reward_posthoc: dict[str, float] = {}
+        success_posthoc: dict[str, float] = {}
         if args.stat_test == "anova":
             reward_groups = []
             success_groups = []
@@ -1382,8 +1386,50 @@ def run(args):
                     reward_groups.append(rewards_flat)
                     success_groups.append(success_flat)
             if len(reward_groups) >= 3:
-                anova_reward_p = f_oneway(*reward_groups).pvalue
-                anova_success_p = f_oneway(*success_groups).pvalue
+                overall_reward_p = anova_oneway(reward_groups, use_var="unequal").pvalue
+                overall_success_p = anova_oneway(success_groups, use_var="unequal").pvalue
+                print("Welch ANOVA reward p-value:", overall_reward_p)
+                print("Welch ANOVA success p-value:", overall_success_p)
+                if overall_reward_p < 0.05:
+                    df_r = []
+                    for g_name, data in metrics.items():
+                        for val in flatten_metric(data["rewards"]):
+                            df_r.append({"group": g_name, "value": val})
+                    df_r = pd.DataFrame(df_r)
+                    gh_r = pg.pairwise_gameshowell(dv="value", between="group", data=df_r)
+                    print("Games-Howell post-hoc rewards:\n", gh_r)
+                    for _, row in gh_r.iterrows():
+                        if row["A"] == "PPO Only":
+                            reward_posthoc[row["B"]] = row["pval"]
+                        elif row["B"] == "PPO Only":
+                            reward_posthoc[row["A"]] = row["pval"]
+                if overall_success_p < 0.05:
+                    df_s = []
+                    for g_name, data in metrics.items():
+                        for val in flatten_metric(data["success"]):
+                            df_s.append({"group": g_name, "value": val})
+                    df_s = pd.DataFrame(df_s)
+                    gh_s = pg.pairwise_gameshowell(dv="value", between="group", data=df_s)
+                    print("Games-Howell post-hoc success:\n", gh_s)
+                    for _, row in gh_s.iterrows():
+                        if row["A"] == "PPO Only":
+                            success_posthoc[row["B"]] = row["pval"]
+                        elif row["B"] == "PPO Only":
+                            success_posthoc[row["A"]] = row["pval"]
+        elif args.stat_test == "friedman":
+            reward_groups = []
+            success_groups = []
+            for data in metrics.values():
+                rewards_flat = flatten_metric(data["rewards"])
+                success_flat = flatten_metric(data["success"])
+                if len(rewards_flat) == len(baseline_rewards) and rewards_flat:
+                    reward_groups.append(rewards_flat)
+                    success_groups.append(success_flat)
+            if len(reward_groups) >= 3:
+                overall_reward_p = friedmanchisquare(*reward_groups).pvalue
+                overall_success_p = friedmanchisquare(*success_groups).pvalue
+                print("Friedman test reward p-value:", overall_reward_p)
+                print("Friedman test success p-value:", overall_success_p)
 
         results = []
         reward_ps: list[float] = []
@@ -1391,13 +1437,21 @@ def run(args):
         success_ps: list[float] = []
         success_idx: list[int] = []
         for name, data in metrics.items():
-            if args.stat_test == "anova":
-                p_reward = anova_reward_p
-                p_success = anova_success_p
+            if args.stat_test in {"anova", "friedman"}:
                 if name == "PPO Only":
+                    p_reward = overall_reward_p
+                    p_success = overall_success_p
                     reward_effect = np.nan
                     success_effect = np.nan
                 else:
+                    if args.stat_test == "anova" and overall_reward_p < 0.05:
+                        p_reward = reward_posthoc.get(name, np.nan)
+                    else:
+                        p_reward = np.nan
+                    if args.stat_test == "anova" and overall_success_p < 0.05:
+                        p_success = success_posthoc.get(name, np.nan)
+                    else:
+                        p_success = np.nan
                     reward_effect = compute_cohens_d(
                         baseline_rewards, flatten_metric(data["rewards"])
                     )
@@ -1497,10 +1551,10 @@ def run(args):
                     "Success p-adj": np.nan,
                 }
             )
-            if not np.isnan(p_reward):
+            if name != "PPO Only" and not np.isnan(p_reward):
                 reward_ps.append(p_reward)
                 reward_idx.append(len(results) - 1)
-            if not np.isnan(p_success):
+            if name != "PPO Only" and not np.isnan(p_success):
                 success_ps.append(p_success)
                 success_idx.append(len(results) - 1)
 
