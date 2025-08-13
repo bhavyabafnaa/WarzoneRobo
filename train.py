@@ -424,7 +424,7 @@ def parse_args():
     parser.add_argument(
         "--H",
         type=int,
-        default=8,
+        default=10,
         help="Subgoal planning horizon",
     )
     parser.add_argument(
