@@ -54,6 +54,7 @@ def test_short_training_loop(tmp_path, budget):
             gamma=0.99,
             gae_lambda=0.95,
             seed=run_seed,
+            imagination_k=0,
         )
         rewards_runs.append(metrics[0])
     assert len(rewards_runs) == 10
@@ -98,6 +99,7 @@ def test_training_one_episode_metrics(tmp_path, budget):
             gamma=0.99,
             gae_lambda=0.95,
             seed=run_seed,
+            imagination_k=0,
         )
         metrics_list.append(metrics)
 
@@ -177,6 +179,7 @@ def test_success_flag_survival(tmp_path, budget):
             clip_epsilon=0.2,
             gamma=0.99,
             gae_lambda=0.95,
+            imagination_k=0,
         )
         rewards, _, _, _, _, _, success_flags, *_rest = metrics
         assert success_flags == [1]
@@ -208,6 +211,7 @@ def test_beta_schedule_consistency():
         num_episodes=3,
         beta_schedule=schedule,
         lambda_cost=0.0,
+        imagination_k=0,
     )
     rewards1, *_, beta_log1 = metrics1
     assert len(rewards1) == 3
@@ -231,6 +235,7 @@ def test_beta_schedule_consistency():
         num_episodes=3,
         beta_schedule=schedule,
         lambda_cost=0.0,
+        imagination_k=0,
     )
     rewards2, *_, beta_log2 = metrics2
     assert len(rewards2) == 3
@@ -264,7 +269,85 @@ def test_allow_early_stop_asserts():
             num_episodes=1,
             allow_early_stop=True,
             lambda_cost=0.0,
+            imagination_k=0,
         )
+
+
+def test_world_model_not_instantiated(monkeypatch):
+    def fail_wm_init(*args, **kwargs):
+        raise AssertionError("WorldModel should not be created")
+
+    def fail_rb_init(*args, **kwargs):
+        raise AssertionError("ReplayBuffer should not be created")
+
+    monkeypatch.setattr("src.ppo.WorldModel", fail_wm_init)
+    monkeypatch.setattr("src.ppo.ReplayBuffer", fail_rb_init)
+
+    env = GridWorldICM(grid_size=2, max_steps=2)
+    input_dim = 4 * env.grid_size * env.grid_size + 2
+    action_dim = 4
+    policy = PPOPolicy(input_dim, action_dim)
+    icm = ICMModule(input_dim, action_dim)
+    planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
+    opt = optim.Adam(policy.parameters(), lr=1e-3)
+
+    train_agent(
+        env,
+        policy,
+        icm,
+        planner,
+        opt,
+        opt,
+        use_icm=False,
+        use_planner=False,
+        num_episodes=1,
+        imagination_k=0,
+    )
+
+
+def test_world_model_instantiated(monkeypatch):
+    from src.world_model import WorldModel as RealWM, ReplayBuffer as RealRB
+
+    wm_created = False
+    rb_created = False
+
+    class WMSpy(RealWM):
+        def __init__(self, *args, **kwargs):
+            nonlocal wm_created
+            wm_created = True
+            super().__init__(*args, **kwargs)
+
+    class RBSpy(RealRB):
+        def __init__(self, *args, **kwargs):
+            nonlocal rb_created
+            rb_created = True
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("src.ppo.WorldModel", WMSpy)
+    monkeypatch.setattr("src.ppo.ReplayBuffer", RBSpy)
+
+    env = GridWorldICM(grid_size=2, max_steps=2)
+    input_dim = 4 * env.grid_size * env.grid_size + 2
+    action_dim = 4
+    policy = PPOPolicy(input_dim, action_dim)
+    icm = ICMModule(input_dim, action_dim)
+    planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
+    opt = optim.Adam(policy.parameters(), lr=1e-3)
+
+    train_agent(
+        env,
+        policy,
+        icm,
+        planner,
+        opt,
+        opt,
+        use_icm=False,
+        use_planner=False,
+        num_episodes=1,
+        imagination_k=1,
+    )
+
+    assert wm_created and rb_created
 
 
 def test_reward_ci_warning():
