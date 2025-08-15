@@ -422,12 +422,7 @@ def train_agent(
             cost_val_buf.append(value_cost.item())
             reward_buf.append(total_reward)
             cost_buf.append(cost_t)
-
-        reward_range = max(reward_buf) - min(reward_buf) + 1e-8
-        reward_buf = [
-            (r - min(reward_buf)) / reward_range
-            for r in reward_buf
-        ]
+        # Compute GAE using raw rewards without normalizing by reward range
         advantages = compute_gae(reward_buf, val_buf, gamma=gamma, lam=gae_lambda)
         cost_advantages = compute_gae(cost_buf, cost_val_buf, gamma=gamma, lam=gae_lambda)
 

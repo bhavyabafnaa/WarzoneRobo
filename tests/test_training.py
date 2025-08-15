@@ -6,7 +6,7 @@ from src.env import GridWorldICM
 from src.icm import ICMModule
 from src.planner import SymbolicPlanner
 from src.pseudocount import PseudoCountExploration
-from src.ppo import PPOPolicy, train_agent, get_beta_schedule
+from src.ppo import PPOPolicy, train_agent, get_beta_schedule, compute_gae
 from train import (
     evaluate_policy_on_maps,
     get_paired_arrays,
@@ -444,3 +444,13 @@ def test_bootstrap_ci_shrinkage():
 def test_mask_rate_percentage_formatting():
     formatted = format_mean_ci([0.1], scale=100)
     assert formatted == "10.00 ± 0.00"
+
+
+def test_advantages_without_reward_normalization():
+    rewards = [1.0, 2.0, -1.0]
+    values = [0.5, 1.0, -0.5]
+    adv_raw = compute_gae(rewards, values, gamma=0.99, lam=0.95)
+    rewards_scaled = [r * 10 for r in rewards]
+    values_scaled = [v * 10 for v in values]
+    adv_scaled = compute_gae(rewards_scaled, values_scaled, gamma=0.99, lam=0.95)
+    assert np.allclose(np.array(adv_scaled), np.array(adv_raw) * 10)
