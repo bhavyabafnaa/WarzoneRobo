@@ -8,6 +8,7 @@ import torch
 import torch.optim as optim
 import pandas as pd
 import numpy as np
+import time
 from scipy import stats
 from scipy.stats import (
     ttest_rel,
@@ -235,6 +236,33 @@ def evaluate_policy_on_maps(
                 subgoal_timer = H
             dx, dy = g[0] - env.agent_pos[0], g[1] - env.agent_pos[1]
             obs = np.concatenate([obs_base, np.array([dx, dy], dtype=np.float32)])
+            total_reward += reward
+            if info.get("dead", False):
+                alive = False
+        rewards.append(total_reward)
+        successes.append(1 if step_count >= env.max_steps and alive else 0)
+    return rewards, successes
+
+
+def evaluate_planner_on_maps(
+    env: GridWorldICM, map_folder: str, num_maps: int
+) -> tuple[list[float], list[int]]:
+    """Evaluate the standalone planner on ``num_maps`` maps."""
+
+    rewards: list[float] = []
+    successes: list[int] = []
+    for i in range(num_maps):
+        map_path = f"{map_folder}/map_{i:02d}.npz"
+        obs, _ = env.reset(load_map_path=map_path)
+        planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
+        done = False
+        total_reward = 0.0
+        step_count = 0
+        alive = True
+        while not done:
+            action = planner.get_safe_subgoal(env.agent_pos)
+            obs, reward, _cost, done, _trunc, info = env.step(action)
+            step_count += 1
             total_reward += reward
             if info.get("dead", False):
                 alive = False
@@ -747,6 +775,86 @@ def run(args):
                 "steps_per_sec": [],
                 "wall_time": [],
             },
+            "LPPO": {
+                "rewards": {},
+                "success": {},
+                "planner_pct": [],
+                "mask_rate": [],
+                "adherence_rate": [],
+                "spikes": [],
+                "episode_costs": [],
+                "violation_flags": [],
+                "first_violation_episode": [],
+                "coverage": [],
+                "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
+            },
+            "Shielded-PPO": {
+                "rewards": {},
+                "success": {},
+                "planner_pct": [],
+                "mask_rate": [],
+                "adherence_rate": [],
+                "spikes": [],
+                "episode_costs": [],
+                "violation_flags": [],
+                "first_violation_episode": [],
+                "coverage": [],
+                "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
+            },
+            "Planner-only": {
+                "rewards": {},
+                "success": {},
+                "planner_pct": [],
+                "mask_rate": [],
+                "adherence_rate": [],
+                "spikes": [],
+                "episode_costs": [],
+                "violation_flags": [],
+                "first_violation_episode": [],
+                "coverage": [],
+                "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
+            },
+            "Planner-Subgoal PPO": {
+                "rewards": {},
+                "success": {},
+                "planner_pct": [],
+                "mask_rate": [],
+                "adherence_rate": [],
+                "spikes": [],
+                "episode_costs": [],
+                "violation_flags": [],
+                "first_violation_episode": [],
+                "coverage": [],
+                "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
+            },
+            "Dyna-PPO(1)": {
+                "rewards": {},
+                "success": {},
+                "planner_pct": [],
+                "mask_rate": [],
+                "adherence_rate": [],
+                "spikes": [],
+                "episode_costs": [],
+                "violation_flags": [],
+                "first_violation_episode": [],
+                "coverage": [],
+                "min_dist": [],
+                "episode_time": [],
+                "steps_per_sec": [],
+                "wall_time": [],
+            },
         }
         bench = {
             "PPO Only": [],
@@ -755,6 +863,11 @@ def run(args):
             "PPO + count": [],
             "PPO + RND": [],
             "PPO + PC": [],
+            "LPPO": [],
+            "Shielded-PPO": [],
+            "Planner-only": [],
+            "Planner-Subgoal PPO": [],
+            "Dyna-PPO(1)": [],
         }
 
         curve_logs = {
@@ -794,6 +907,41 @@ def run(args):
                 "violation_flags": [],
             },
             "PPO + PC": {
+                "rewards": [],
+                "intrinsic": [],
+                "success": [],
+                "episode_costs": [],
+                "violation_flags": [],
+            },
+            "LPPO": {
+                "rewards": [],
+                "intrinsic": [],
+                "success": [],
+                "episode_costs": [],
+                "violation_flags": [],
+            },
+            "Shielded-PPO": {
+                "rewards": [],
+                "intrinsic": [],
+                "success": [],
+                "episode_costs": [],
+                "violation_flags": [],
+            },
+            "Planner-only": {
+                "rewards": [],
+                "intrinsic": [],
+                "success": [],
+                "episode_costs": [],
+                "violation_flags": [],
+            },
+            "Planner-Subgoal PPO": {
+                "rewards": [],
+                "intrinsic": [],
+                "success": [],
+                "episode_costs": [],
+                "violation_flags": [],
+            },
+            "Dyna-PPO(1)": {
                 "rewards": [],
                 "intrinsic": [],
                 "success": [],
@@ -929,6 +1077,469 @@ def run(args):
                 env,
                 ppo_policy,
                 "PPO Only",
+                setting["name"],
+                plot_dir,
+                args.H,
+            )
+
+            # LPPO
+            print("Training LPPO")
+            lppo_policy = PPOPolicy(input_dim, action_dim)
+            opt_lppo = optim.Adam(lppo_policy.parameters(), lr=args.learning_rate)
+            (
+                rewards_lppo,
+                intrinsic_lppo,
+                _,
+                _,
+                paths_lppo,
+                _,
+                success_lppo,
+                planner_rate_lppo,
+                mask_counts_lppo,
+                mask_rates_lppo,
+                adherence_rates_lppo,
+                coverage_lppo,
+                min_dists_lppo,
+                episode_costs_lppo,
+                violation_flags_lppo,
+                first_violation_episode_lppo,
+                episode_times_lppo,
+                steps_per_sec_lppo,
+                wall_clock_times_lppo,
+            ) = train_agent(
+                env,
+                lppo_policy,
+                icm,
+                planner,
+                opt_lppo,
+                opt_lppo,
+                use_icm=False,
+                use_planner=False,
+                num_episodes=args.num_episodes,
+                beta=args.initial_beta,
+                final_beta=args.final_beta,
+                planner_weights=planner_weights,
+                seed=run_seed,
+                add_noise=args.add_noise,
+                logger=logger,
+                lambda_cost=args.lambda_cost,
+                eta_lambda=args.eta_lambda,
+                cost_limit=args.cost_limit,
+                c1=args.c1,
+                c2=args.c2,
+                entropy_coef=args.entropy_coef,
+                tau=args.tau,
+                kappa=args.kappa,
+                use_risk_penalty=not args.disable_risk_penalty,
+                H=args.H,
+                waypoint_bonus=args.waypoint_bonus,
+                imagination_k=args.K,
+                world_model_lr=args.world_model_lr,
+                clip_epsilon=args.clip_epsilon,
+                gamma=args.gamma,
+                gae_lambda=args.gae_lambda,
+            )
+            metrics["LPPO"]["planner_pct"].append(float(np.mean(planner_rate_lppo)))
+            metrics["LPPO"]["mask_rate"].append(float(np.mean(mask_rates_lppo)))
+            metrics["LPPO"]["adherence_rate"].append(float(np.mean(adherence_rates_lppo)))
+            metrics["LPPO"]["min_dist"].append(float(np.mean(min_dists_lppo)))
+            metrics["LPPO"]["spikes"].append(count_intrinsic_spikes(intrinsic_lppo))
+            metrics["LPPO"]["episode_costs"].append(float(np.mean(episode_costs_lppo)))
+            metrics["LPPO"]["violation_flags"].append(float(np.mean(violation_flags_lppo)))
+            metrics["LPPO"]["first_violation_episode"].append(first_violation_episode_lppo)
+            metrics["LPPO"]["coverage"].append(float(np.mean(coverage_lppo)))
+            metrics["LPPO"]["episode_time"].append(float(np.mean(episode_times_lppo)))
+            metrics["LPPO"]["steps_per_sec"].append(float(np.mean(steps_per_sec_lppo)))
+            metrics["LPPO"]["wall_time"].append(float(wall_clock_times_lppo[-1]))
+            save_model(
+                lppo_policy,
+                os.path.join(checkpoint_dir, f"lppo_{run_seed}.pt"),
+            )
+            curve_logs["LPPO"]["rewards"].append(rewards_lppo)
+            curve_logs["LPPO"]["success"].append(success_lppo)
+            curve_logs["LPPO"]["episode_costs"].append(episode_costs_lppo)
+            curve_logs["LPPO"]["violation_flags"].append(violation_flags_lppo)
+            render_episode_video(
+                env,
+                lppo_policy,
+                os.path.join(video_dir, f"{safe_setting}_lppo_{run_seed}.gif"),
+                H=args.H,
+            )
+            rewards_b, success_b = evaluate_policy_on_maps(
+                env, lppo_policy, "test_maps", 5, H=args.H
+            )
+            metrics["LPPO"]["rewards"][run_seed] = rewards_b
+            metrics["LPPO"]["success"][run_seed] = success_b
+            bench["LPPO"].append(float(np.mean(rewards_b)))
+            plot_policy_coverage(
+                env,
+                lppo_policy,
+                "LPPO",
+                setting["name"],
+                plot_dir,
+                args.H,
+            )
+
+            # Shielded-PPO
+            print("Training Shielded-PPO")
+            shield_policy = PPOPolicy(input_dim, action_dim)
+            opt_shield = optim.Adam(shield_policy.parameters(), lr=args.learning_rate)
+            (
+                rewards_shield,
+                intrinsic_shield,
+                _,
+                _,
+                paths_shield,
+                _,
+                success_shield,
+                planner_rate_shield,
+                mask_counts_shield,
+                mask_rates_shield,
+                adherence_rates_shield,
+                coverage_shield,
+                min_dists_shield,
+                episode_costs_shield,
+                violation_flags_shield,
+                first_violation_episode_shield,
+                episode_times_shield,
+                steps_per_sec_shield,
+                wall_clock_times_shield,
+            ) = train_agent(
+                env,
+                shield_policy,
+                icm,
+                planner,
+                opt_shield,
+                opt_shield,
+                use_icm=False,
+                use_planner=True,
+                num_episodes=args.num_episodes,
+                beta=args.initial_beta,
+                final_beta=args.final_beta,
+                planner_weights=planner_weights,
+                seed=run_seed,
+                add_noise=args.add_noise,
+                logger=logger,
+                lambda_cost=0.0,
+                eta_lambda=args.eta_lambda,
+                cost_limit=args.cost_limit,
+                c1=args.c1,
+                c2=args.c2,
+                entropy_coef=args.entropy_coef,
+                tau=args.tau,
+                kappa=args.kappa,
+                use_risk_penalty=not args.disable_risk_penalty,
+                H=args.H,
+                waypoint_bonus=0.0,
+                imagination_k=args.K,
+                world_model_lr=args.world_model_lr,
+                clip_epsilon=args.clip_epsilon,
+                gamma=args.gamma,
+                gae_lambda=args.gae_lambda,
+            )
+            metrics["Shielded-PPO"]["planner_pct"].append(float(np.mean(planner_rate_shield)))
+            metrics["Shielded-PPO"]["mask_rate"].append(float(np.mean(mask_rates_shield)))
+            metrics["Shielded-PPO"]["adherence_rate"].append(float(np.mean(adherence_rates_shield)))
+            metrics["Shielded-PPO"]["min_dist"].append(float(np.mean(min_dists_shield)))
+            metrics["Shielded-PPO"]["spikes"].append(count_intrinsic_spikes(intrinsic_shield))
+            metrics["Shielded-PPO"]["episode_costs"].append(float(np.mean(episode_costs_shield)))
+            metrics["Shielded-PPO"]["violation_flags"].append(float(np.mean(violation_flags_shield)))
+            metrics["Shielded-PPO"]["first_violation_episode"].append(first_violation_episode_shield)
+            metrics["Shielded-PPO"]["coverage"].append(float(np.mean(coverage_shield)))
+            metrics["Shielded-PPO"]["episode_time"].append(float(np.mean(episode_times_shield)))
+            metrics["Shielded-PPO"]["steps_per_sec"].append(float(np.mean(steps_per_sec_shield)))
+            metrics["Shielded-PPO"]["wall_time"].append(float(wall_clock_times_shield[-1]))
+            save_model(
+                shield_policy,
+                os.path.join(checkpoint_dir, f"shielded_ppo_{run_seed}.pt"),
+            )
+            curve_logs["Shielded-PPO"]["rewards"].append(rewards_shield)
+            curve_logs["Shielded-PPO"]["success"].append(success_shield)
+            curve_logs["Shielded-PPO"]["episode_costs"].append(episode_costs_shield)
+            curve_logs["Shielded-PPO"]["violation_flags"].append(violation_flags_shield)
+            render_episode_video(
+                env,
+                shield_policy,
+                os.path.join(video_dir, f"{safe_setting}_shielded_ppo_{run_seed}.gif"),
+                H=args.H,
+            )
+            rewards_b, success_b = evaluate_policy_on_maps(
+                env, shield_policy, "test_maps", 5, H=args.H
+            )
+            metrics["Shielded-PPO"]["rewards"][run_seed] = rewards_b
+            metrics["Shielded-PPO"]["success"][run_seed] = success_b
+            bench["Shielded-PPO"].append(float(np.mean(rewards_b)))
+            plot_policy_coverage(
+                env,
+                shield_policy,
+                "Shielded-PPO",
+                setting["name"],
+                plot_dir,
+                args.H,
+            )
+
+            # Planner-only
+            print("Running Planner-only")
+            planner.reset()
+            rewards_po: list[float] = []
+            success_po: list[int] = []
+            episode_costs_po: list[float] = []
+            violation_flags_po: list[float] = []
+            coverage_po: list[float] = []
+            min_dists_po: list[float] = []
+            episode_times_po: list[float] = []
+            steps_per_sec_po: list[float] = []
+            wall_clock_po: list[float] = []
+            start_po = time.time()
+            first_violation_po = args.num_episodes
+            for ep in range(args.num_episodes):
+                ep_start = time.time()
+                obs, _ = env.reset(seed=run_seed)
+                planner.reset()
+                done = False
+                total_reward = 0.0
+                step_count = 0
+                visit: set[tuple[int, int]] = set()
+                min_dist = float("inf")
+                alive = True
+                while not done:
+                    action = planner.get_safe_subgoal(env.agent_pos)
+                    obs, reward, _cost, done, _, info = env.step(action)
+                    total_reward += reward
+                    step_count += 1
+                    visit.add(tuple(env.agent_pos))
+                    if env.enemy_positions:
+                        x, y = env.agent_pos
+                        curr = min(abs(x - ex) + abs(y - ey) for ex, ey in env.enemy_positions)
+                        min_dist = min(min_dist, curr)
+                    if info.get("dead", False):
+                        alive = False
+                rewards_po.append(total_reward)
+                success_po.append(1 if step_count >= env.max_steps and alive else 0)
+                Jc = env.episode_cost
+                episode_costs_po.append(Jc)
+                viol = float(Jc > args.cost_limit)
+                violation_flags_po.append(viol)
+                if viol == 1.0 and first_violation_po == args.num_episodes:
+                    first_violation_po = ep
+                coverage_po.append(len(visit))
+                min_dists_po.append(min_dist if min_dist < float("inf") else env.grid_size * 2)
+                ep_time = time.time() - ep_start
+                episode_times_po.append(ep_time)
+                steps_per_sec_po.append(step_count / ep_time if ep_time > 0 else 0.0)
+                wall_clock_po.append(time.time() - start_po)
+            metrics["Planner-only"]["planner_pct"].append(1.0)
+            metrics["Planner-only"]["mask_rate"].append(0.0)
+            metrics["Planner-only"]["adherence_rate"].append(1.0)
+            metrics["Planner-only"]["min_dist"].append(float(np.mean(min_dists_po)))
+            metrics["Planner-only"]["spikes"].append(0)
+            metrics["Planner-only"]["episode_costs"].append(float(np.mean(episode_costs_po)))
+            metrics["Planner-only"]["violation_flags"].append(float(np.mean(violation_flags_po)))
+            metrics["Planner-only"]["first_violation_episode"].append(first_violation_po)
+            metrics["Planner-only"]["coverage"].append(float(np.mean(coverage_po)))
+            metrics["Planner-only"]["episode_time"].append(float(np.mean(episode_times_po)))
+            metrics["Planner-only"]["steps_per_sec"].append(float(np.mean(steps_per_sec_po)))
+            metrics["Planner-only"]["wall_time"].append(float(wall_clock_po[-1]))
+            curve_logs["Planner-only"]["rewards"].append(rewards_po)
+            curve_logs["Planner-only"]["success"].append(success_po)
+            curve_logs["Planner-only"]["episode_costs"].append(episode_costs_po)
+            curve_logs["Planner-only"]["violation_flags"].append(violation_flags_po)
+            rewards_b, success_b = evaluate_planner_on_maps(env, "test_maps", 5)
+            metrics["Planner-only"]["rewards"][run_seed] = rewards_b
+            metrics["Planner-only"]["success"][run_seed] = success_b
+            bench["Planner-only"].append(float(np.mean(rewards_b)))
+
+            # Planner-Subgoal PPO
+            print("Training Planner-Subgoal PPO")
+            subgoal_policy = PPOPolicy(input_dim, action_dim)
+            opt_subgoal = optim.Adam(subgoal_policy.parameters(), lr=args.learning_rate)
+            (
+                rewards_subgoal,
+                intrinsic_subgoal,
+                _,
+                _,
+                paths_subgoal,
+                _,
+                success_subgoal,
+                planner_rate_subgoal,
+                mask_counts_subgoal,
+                mask_rates_subgoal,
+                adherence_rates_subgoal,
+                coverage_subgoal,
+                min_dists_subgoal,
+                episode_costs_subgoal,
+                violation_flags_subgoal,
+                first_violation_episode_subgoal,
+                episode_times_subgoal,
+                steps_per_sec_subgoal,
+                wall_clock_times_subgoal,
+            ) = train_agent(
+                env,
+                subgoal_policy,
+                icm,
+                planner,
+                opt_subgoal,
+                opt_subgoal,
+                use_icm=False,
+                use_planner=True,
+                num_episodes=args.num_episodes,
+                beta=args.initial_beta,
+                final_beta=args.final_beta,
+                planner_weights=planner_weights,
+                seed=run_seed,
+                add_noise=args.add_noise,
+                logger=logger,
+                lambda_cost=0.0,
+                eta_lambda=args.eta_lambda,
+                cost_limit=args.cost_limit,
+                c1=args.c1,
+                c2=args.c2,
+                entropy_coef=args.entropy_coef,
+                tau=args.tau,
+                kappa=args.kappa,
+                use_risk_penalty=not args.disable_risk_penalty,
+                H=args.H,
+                waypoint_bonus=args.waypoint_bonus,
+                imagination_k=args.K,
+                world_model_lr=args.world_model_lr,
+                clip_epsilon=args.clip_epsilon,
+                gamma=args.gamma,
+                gae_lambda=args.gae_lambda,
+            )
+            metrics["Planner-Subgoal PPO"]["planner_pct"].append(float(np.mean(planner_rate_subgoal)))
+            metrics["Planner-Subgoal PPO"]["mask_rate"].append(float(np.mean(mask_rates_subgoal)))
+            metrics["Planner-Subgoal PPO"]["adherence_rate"].append(float(np.mean(adherence_rates_subgoal)))
+            metrics["Planner-Subgoal PPO"]["min_dist"].append(float(np.mean(min_dists_subgoal)))
+            metrics["Planner-Subgoal PPO"]["spikes"].append(count_intrinsic_spikes(intrinsic_subgoal))
+            metrics["Planner-Subgoal PPO"]["episode_costs"].append(float(np.mean(episode_costs_subgoal)))
+            metrics["Planner-Subgoal PPO"]["violation_flags"].append(float(np.mean(violation_flags_subgoal)))
+            metrics["Planner-Subgoal PPO"]["first_violation_episode"].append(first_violation_episode_subgoal)
+            metrics["Planner-Subgoal PPO"]["coverage"].append(float(np.mean(coverage_subgoal)))
+            metrics["Planner-Subgoal PPO"]["episode_time"].append(float(np.mean(episode_times_subgoal)))
+            metrics["Planner-Subgoal PPO"]["steps_per_sec"].append(float(np.mean(steps_per_sec_subgoal)))
+            metrics["Planner-Subgoal PPO"]["wall_time"].append(float(wall_clock_times_subgoal[-1]))
+            save_model(
+                subgoal_policy,
+                os.path.join(checkpoint_dir, f"planner_subgoal_ppo_{run_seed}.pt"),
+            )
+            curve_logs["Planner-Subgoal PPO"]["rewards"].append(rewards_subgoal)
+            curve_logs["Planner-Subgoal PPO"]["success"].append(success_subgoal)
+            curve_logs["Planner-Subgoal PPO"]["episode_costs"].append(episode_costs_subgoal)
+            curve_logs["Planner-Subgoal PPO"]["violation_flags"].append(violation_flags_subgoal)
+            render_episode_video(
+                env,
+                subgoal_policy,
+                os.path.join(video_dir, f"{safe_setting}_planner_subgoal_ppo_{run_seed}.gif"),
+                H=args.H,
+            )
+            rewards_b, success_b = evaluate_policy_on_maps(
+                env, subgoal_policy, "test_maps", 5, H=args.H
+            )
+            metrics["Planner-Subgoal PPO"]["rewards"][run_seed] = rewards_b
+            metrics["Planner-Subgoal PPO"]["success"][run_seed] = success_b
+            bench["Planner-Subgoal PPO"].append(float(np.mean(rewards_b)))
+            plot_policy_coverage(
+                env,
+                subgoal_policy,
+                "Planner-Subgoal PPO",
+                setting["name"],
+                plot_dir,
+                args.H,
+            )
+
+            # Dyna-PPO(1)
+            print("Training Dyna-PPO(1)")
+            dyna_policy = PPOPolicy(input_dim, action_dim)
+            opt_dyna = optim.Adam(dyna_policy.parameters(), lr=args.learning_rate)
+            (
+                rewards_dyna,
+                intrinsic_dyna,
+                _,
+                _,
+                paths_dyna,
+                _,
+                success_dyna,
+                planner_rate_dyna,
+                mask_counts_dyna,
+                mask_rates_dyna,
+                adherence_rates_dyna,
+                coverage_dyna,
+                min_dists_dyna,
+                episode_costs_dyna,
+                violation_flags_dyna,
+                first_violation_episode_dyna,
+                episode_times_dyna,
+                steps_per_sec_dyna,
+                wall_clock_times_dyna,
+            ) = train_agent(
+                env,
+                dyna_policy,
+                icm,
+                planner,
+                opt_dyna,
+                opt_dyna,
+                use_icm=False,
+                use_planner=False,
+                num_episodes=args.num_episodes,
+                beta=args.initial_beta,
+                final_beta=args.final_beta,
+                planner_weights=planner_weights,
+                seed=run_seed,
+                add_noise=args.add_noise,
+                logger=logger,
+                lambda_cost=0.0,
+                eta_lambda=args.eta_lambda,
+                cost_limit=args.cost_limit,
+                c1=args.c1,
+                c2=args.c2,
+                entropy_coef=args.entropy_coef,
+                tau=args.tau,
+                kappa=args.kappa,
+                use_risk_penalty=not args.disable_risk_penalty,
+                H=args.H,
+                waypoint_bonus=0.0,
+                imagination_k=args.K,
+                world_model_lr=args.world_model_lr,
+                clip_epsilon=args.clip_epsilon,
+                gamma=args.gamma,
+                gae_lambda=args.gae_lambda,
+            )
+            metrics["Dyna-PPO(1)"]["planner_pct"].append(float(np.mean(planner_rate_dyna)))
+            metrics["Dyna-PPO(1)"]["mask_rate"].append(float(np.mean(mask_rates_dyna)))
+            metrics["Dyna-PPO(1)"]["adherence_rate"].append(float(np.mean(adherence_rates_dyna)))
+            metrics["Dyna-PPO(1)"]["min_dist"].append(float(np.mean(min_dists_dyna)))
+            metrics["Dyna-PPO(1)"]["spikes"].append(count_intrinsic_spikes(intrinsic_dyna))
+            metrics["Dyna-PPO(1)"]["episode_costs"].append(float(np.mean(episode_costs_dyna)))
+            metrics["Dyna-PPO(1)"]["violation_flags"].append(float(np.mean(violation_flags_dyna)))
+            metrics["Dyna-PPO(1)"]["first_violation_episode"].append(first_violation_episode_dyna)
+            metrics["Dyna-PPO(1)"]["coverage"].append(float(np.mean(coverage_dyna)))
+            metrics["Dyna-PPO(1)"]["episode_time"].append(float(np.mean(episode_times_dyna)))
+            metrics["Dyna-PPO(1)"]["steps_per_sec"].append(float(np.mean(steps_per_sec_dyna)))
+            metrics["Dyna-PPO(1)"]["wall_time"].append(float(wall_clock_times_dyna[-1]))
+            save_model(
+                dyna_policy,
+                os.path.join(checkpoint_dir, f"dyna_ppo1_{run_seed}.pt"),
+            )
+            curve_logs["Dyna-PPO(1)"]["rewards"].append(rewards_dyna)
+            curve_logs["Dyna-PPO(1)"]["success"].append(success_dyna)
+            curve_logs["Dyna-PPO(1)"]["episode_costs"].append(episode_costs_dyna)
+            curve_logs["Dyna-PPO(1)"]["violation_flags"].append(violation_flags_dyna)
+            render_episode_video(
+                env,
+                dyna_policy,
+                os.path.join(video_dir, f"{safe_setting}_dyna_ppo1_{run_seed}.gif"),
+                H=args.H,
+            )
+            rewards_b, success_b = evaluate_policy_on_maps(
+                env, dyna_policy, "test_maps", 5, H=args.H
+            )
+            metrics["Dyna-PPO(1)"]["rewards"][run_seed] = rewards_b
+            metrics["Dyna-PPO(1)"]["success"][run_seed] = success_b
+            bench["Dyna-PPO(1)"].append(float(np.mean(rewards_b)))
+            plot_policy_coverage(
+                env,
+                dyna_policy,
+                "Dyna-PPO(1)",
                 setting["name"],
                 plot_dir,
                 args.H,
