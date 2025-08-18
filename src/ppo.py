@@ -89,6 +89,7 @@ def train_agent(
     rnd: Optional[RNDModule] = None,
     pseudo: Optional[PseudoCountExploration] = None,
     seed: int = 42,
+    map_id: int = 0,
     add_noise: bool = False,
     logger=None,
     initial_bonus: float = 0.5,
@@ -163,6 +164,15 @@ def train_agent(
     wall_clock_times = []
     beta_log: List[float] = []
     lambda_log: List[float] = []
+    near_miss_counts: List[int] = []
+    intrinsic_icm_sums: List[float] = []
+    intrinsic_rnd_sums: List[float] = []
+    policy_entropy_means: List[float] = []
+    value_losses: List[float] = []
+    kl_policies: List[float] = []
+    dyna_model_losses: List[float] = []
+    seed_log: List[int] = []
+    map_id_log: List[int] = []
 
     initial_bonus = max(0.1, float(initial_bonus))
 
@@ -246,6 +256,10 @@ def train_agent(
         mask_count = 0
         min_dist = float('inf')
         adherence_count = 0
+        near_miss = 0
+        icm_total = 0.0
+        rnd_total = 0.0
+        model_loss_sum = 0.0
 
         # Determine intrinsic reward weight for this episode
         if beta_schedule is not None:
@@ -324,6 +338,8 @@ def train_agent(
                     for ex, ey in env.enemy_positions
                 )
                 min_dist = min(min_dist, curr_min)
+                if curr_min < 2:
+                    near_miss += 1
             visit_count[x][y] += 1
             count_reward = 1.0 / np.sqrt(visit_count[x][y])
 
@@ -383,6 +399,7 @@ def train_agent(
                     optimizer_policy.zero_grad()
                     model_loss.backward()
                     optimizer_policy.step()
+                    model_loss_sum += model_loss.item()
 
             if use_icm == "count":
                 total_reward = ext_reward + beta_val * count_reward
@@ -391,6 +408,7 @@ def train_agent(
                 r_int, pred, target = rnd(state_tensor)
                 total_reward = ext_reward + beta_val * r_int.item()
                 curiosity = r_int
+                rnd_total += r_int.item()
                 loss = F.mse_loss(pred, target.detach())
                 optimizer_icm.zero_grad()
                 loss.backward()
@@ -403,6 +421,7 @@ def train_agent(
                 curiosity, f_loss, i_loss = icm(
                     state_tensor, next_tensor, action_tensor)
                 total_reward = ext_reward + beta_val * curiosity.item()
+                icm_total += curiosity.item()
                 icm_loss = f_loss + i_loss
                 optimizer_icm.zero_grad()
                 icm_loss.backward()
@@ -460,6 +479,8 @@ def train_agent(
             new_cost_vals.squeeze(), torch.tensor(
                 cost_buf, dtype=torch.float32))
         entropy_mean = entropy.mean()
+        value_loss = (v_reward_loss + v_cost_loss).item()
+        kl_div = (logprob_tensor - new_logprob).mean().item()
 
         total_loss = (
             -(l_reward - lambda_val * l_cost)
@@ -506,6 +527,15 @@ def train_agent(
         coverage_log.append(coverage)
         min_dist_val = min_dist if min_dist < float('inf') else env.grid_size * 2
         min_dist_log.append(min_dist_val)
+        near_miss_counts.append(near_miss)
+        intrinsic_icm_sums.append(icm_total)
+        intrinsic_rnd_sums.append(rnd_total)
+        policy_entropy_means.append(entropy_mean.item())
+        value_losses.append(value_loss)
+        kl_policies.append(kl_div)
+        dyna_model_losses.append(model_loss_sum)
+        seed_log.append(seed)
+        map_id_log.append(map_id)
 
         elapsed = time.time() - episode_start
         steps_per_sec = step_count / elapsed if elapsed > 0 else 0.0
@@ -577,6 +607,29 @@ def train_agent(
 
     if first_violation_episode is None:
         first_violation_episode = num_episodes
+    episode_data = []
+    for i in range(len(reward_log)):
+        episode_data.append({
+            "reward": reward_log[i],
+            "success": success_flags[i],
+            "cost_sum": episode_costs[i],
+            "steps": step_counts[i],
+            "coverage": coverage_log[i],
+            "min_enemy_dist": min_dist_log[i],
+            "planner_adherence": adherence_rates[i],
+            "mask_rate": mask_rates[i],
+            "lambda": lambda_log[i],
+            "wall_clock": wall_clock_times[i],
+            "near_miss_count": near_miss_counts[i],
+            "intrinsic_icm_sum": intrinsic_icm_sums[i],
+            "intrinsic_rnd_sum": intrinsic_rnd_sums[i],
+            "policy_entropy_mean": policy_entropy_means[i],
+            "value_loss": value_losses[i],
+            "kl_policy": kl_policies[i],
+            "dyna_model_loss": dyna_model_losses[i],
+            "seed": seed_log[i],
+            "map_id": map_id_log[i],
+        })
 
     return (
         reward_log,
@@ -600,4 +653,5 @@ def train_agent(
         wall_clock_times,
         beta_log,
         lambda_log,
+        episode_data,
     )
