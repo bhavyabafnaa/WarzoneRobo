@@ -395,8 +395,8 @@ def test_episode_near_miss_logging(tmp_path, monkeypatch):
         reset_env=False,
     )
     episode_data = metrics[-1]
-    save_episode_metrics("test", 0, 0, episode_data)
-    df = pd.read_csv("results/episodes/test__seed0__split-0.csv")
+    save_episode_metrics("test", 0, "train", episode_data)
+    df = pd.read_csv("results/episodes/test__seed0__split-train.csv")
     assert df["near_miss_count"].tolist() == [0]
     assert df["intrinsic_spike_count"].tolist() == [0]
 
