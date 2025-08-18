@@ -200,6 +200,41 @@ def check_reward_difference_ci(
     return diff, ci_width
 
 
+EPISODE_COLUMNS = [
+    "reward",
+    "success",
+    "cost_sum",
+    "steps",
+    "coverage",
+    "min_enemy_dist",
+    "planner_adherence",
+    "mask_rate",
+    "lambda",
+    "wall_clock",
+    "near_miss_count",
+    "intrinsic_icm_sum",
+    "intrinsic_rnd_sum",
+    "policy_entropy_mean",
+    "value_loss",
+    "kl_policy",
+    "dyna_model_loss",
+    "seed",
+    "map_id",
+]
+
+
+def save_episode_metrics(method: str, run_seed: int, split: int, episode_records: list[dict]):
+    """Save per-episode metrics to a CSV file."""
+    if not episode_records:
+        return
+    os.makedirs("results/episodes", exist_ok=True)
+    df = pd.DataFrame(episode_records)
+    df = df[EPISODE_COLUMNS]
+    safe_method = method.replace(" ", "_").replace("+", "_")
+    out_path = f"results/episodes/{safe_method}__seed{run_seed}__split-{split}.csv"
+    df.to_csv(out_path, index=False)
+
+
 def evaluate_policy_on_maps(
     env: GridWorldICM,
     policy: PPOPolicy,
@@ -394,6 +429,7 @@ def parse_args(arg_list: list[str] | None = None):
     parser.add_argument("--grid_size", type=int, default=12)
     parser.add_argument("--num_episodes", type=int, default=500)
     parser.add_argument("--max-steps", dest="max_steps", type=int, default=100)
+    parser.add_argument("--split", type=int, default=0, help="Dataset split identifier")
     parser.add_argument(
         "--cost_weight",
         type=float,
@@ -1117,6 +1153,7 @@ def run(args):
                 wall_clock_times_ppo_only,
                 beta_log_ppo_only,
                 lambda_log_ppo_only,
+                episode_data_ppo_only,
             ) = train_agent(
                 env,
                 ppo_policy,
@@ -1150,7 +1187,9 @@ def run(args):
                 clip_epsilon=args.clip_epsilon,
                 gamma=args.gamma,
                 gae_lambda=args.gae_lambda,
+                map_id=0,
             )
+            save_episode_metrics("PPO Only", run_seed, args.split, episode_data_ppo_only)
             metrics["PPO Only"]["auc_reward"].append(
                 compute_auc_reward(rewards_ppo_only)
             )
@@ -1248,6 +1287,7 @@ def run(args):
                 wall_clock_times_lppo,
                 beta_log_lppo,
                 lambda_log_lppo,
+                episode_data_lppo,
             ) = train_agent(
                 env,
                 lppo_policy,
@@ -1281,7 +1321,9 @@ def run(args):
                 clip_epsilon=args.clip_epsilon,
                 gamma=args.gamma,
                 gae_lambda=args.gae_lambda,
+                map_id=0,
             )
+            save_episode_metrics("LPPO", run_seed, args.split, episode_data_lppo)
             metrics["LPPO"]["auc_reward"].append(
                 compute_auc_reward(rewards_lppo)
             )
@@ -1362,6 +1404,7 @@ def run(args):
                 wall_clock_times_shield,
                 beta_log_shield,
                 lambda_log_shield,
+                episode_data_shield,
             ) = train_agent(
                 env,
                 shield_policy,
@@ -1395,7 +1438,9 @@ def run(args):
                 clip_epsilon=args.clip_epsilon,
                 gamma=args.gamma,
                 gae_lambda=args.gae_lambda,
+                map_id=0,
             )
+            save_episode_metrics("Shielded-PPO", run_seed, args.split, episode_data_shield)
             metrics["Shielded-PPO"]["auc_reward"].append(
                 compute_auc_reward(rewards_shield)
             )
@@ -1550,6 +1595,7 @@ def run(args):
                 wall_clock_times_subgoal,
                 beta_log_subgoal,
                 lambda_log_subgoal,
+                episode_data_subgoal,
             ) = train_agent(
                 env,
                 subgoal_policy,
@@ -1583,7 +1629,9 @@ def run(args):
                 clip_epsilon=args.clip_epsilon,
                 gamma=args.gamma,
                 gae_lambda=args.gae_lambda,
+                map_id=0,
             )
+            save_episode_metrics("Planner-Subgoal PPO", run_seed, args.split, episode_data_subgoal)
             metrics["Planner-Subgoal PPO"]["auc_reward"].append(
                 compute_auc_reward(rewards_subgoal)
             )
@@ -1664,6 +1712,7 @@ def run(args):
                 wall_clock_times_dyna,
                 beta_log_dyna,
                 lambda_log_dyna,
+                episode_data_dyna,
             ) = train_agent(
                 env,
                 dyna_policy,
@@ -1697,7 +1746,9 @@ def run(args):
                 clip_epsilon=args.clip_epsilon,
                 gamma=args.gamma,
                 gae_lambda=args.gae_lambda,
+                map_id=0,
             )
+            save_episode_metrics("Dyna-PPO(1)", run_seed, args.split, episode_data_dyna)
             metrics["Dyna-PPO(1)"]["auc_reward"].append(
                 compute_auc_reward(rewards_dyna)
             )
@@ -1780,6 +1831,7 @@ def run(args):
                 wall_clock_times_icm,
                 beta_log_icm,
                 lambda_log_icm,
+                episode_data_icm,
             ) = train_agent(
                 env,
                 ppo_icm_policy,
@@ -1813,79 +1865,82 @@ def run(args):
                     clip_epsilon=args.clip_epsilon,
                     gamma=args.gamma,
                     gae_lambda=args.gae_lambda,
+                    map_id=0,
                 )
-                metrics["PPO + ICM"]["auc_reward"].append(
-                    compute_auc_reward(rewards_ppo_icm)
-                )
-                metrics["PPO + ICM"]["planner_pct"].append(
-                    float(np.mean(planner_rate_icm)))
-                metrics["PPO + ICM"]["mask_rate"].append(
-                    float(np.mean(mask_rates_icm)))
-                metrics["PPO + ICM"]["adherence_rate"].append(
-                    float(np.mean(adherence_rates_icm)))
-                metrics["PPO + ICM"]["min_dist"].append(
-                    float(np.mean(min_dists_icm)))
-                metrics["PPO + ICM"]["spikes"].append(
-                    count_intrinsic_spikes(intrinsic_icm))
-                metrics["PPO + ICM"]["episode_costs"].append(
-                    float(np.mean(episode_costs_icm)))
-                metrics["PPO + ICM"]["violation_flags"].append(
-                    float(np.mean(violation_flags_icm)))
-                metrics["PPO + ICM"]["first_violation_episode"].append(
-                    first_violation_episode_icm
-                )
-                metrics["PPO + ICM"]["coverage"].append(
-                    float(np.mean(coverage_icm)))
-                metrics["PPO + ICM"]["episode_time"].append(
-                    float(np.mean(episode_times_icm)))
-                metrics["PPO + ICM"]["steps_per_sec"].append(
-                    float(np.mean(steps_per_sec_icm)))
-                metrics["PPO + ICM"]["wall_time"].append(
-                    float(wall_clock_times_icm[-1]))
-                metrics["PPO + ICM"]["lambda_vals"].append(lambda_log_icm)
-                save_model(
-                    ppo_icm_policy,
-                    os.path.join(
-                        checkpoint_dir,
-                        f"ppo_icm_{run_seed}.pt"),
-                    icm=icm)
-                curve_logs["PPO + ICM"]["rewards"].append(rewards_ppo_icm)
-                curve_logs["PPO + ICM"]["intrinsic"].append(intrinsic_icm)
-                curve_logs["PPO + ICM"]["success"].append(success_icm)
-                curve_logs["PPO + ICM"]["episode_costs"].append(
-                    episode_costs_icm)
-                curve_logs["PPO + ICM"]["violation_flags"].append(
-                    violation_flags_icm)
-                curve_logs["PPO + ICM"]["lambda"].append(lambda_log_icm)
-                render_episode_video(
-                    env,
-                    ppo_icm_policy,
-                    os.path.join(
-                        video_dir, f"{safe_setting}_ppo_icm_{run_seed}.gif"),
-                    H=args.H,
-                )
-                id_res, ood_res = evaluate_on_benchmarks(
-                    env,
-                    ppo_icm_policy,
-                    "test_maps",
-                    5,
-                    H=args.H,
-                    ood_map_folder="ood_maps",
-                    num_ood_maps=10,
-                )
-                metrics["PPO + ICM"]["rewards"][run_seed] = [id_res[0]]
-                metrics["PPO + ICM"]["success"][run_seed] = [0.0]
-                metrics["PPO + ICM"]["ood_rewards"][run_seed] = [ood_res[0]]
-                bench["PPO + ICM"].append(id_res[0])
-                bench_ood["PPO + ICM"].append(ood_res[0])
-                plot_policy_coverage(
-                    env,
-                    ppo_icm_policy,
-                    "PPO + ICM",
-                    setting["name"],
-                    plot_dir,
-                    args.H,
-                )
+            save_episode_metrics("PPO + ICM", run_seed, args.split, episode_data_icm)
+            metrics["PPO + ICM"]["auc_reward"].append(
+                compute_auc_reward(rewards_ppo_icm)
+            )
+            metrics["PPO + ICM"]["planner_pct"].append(
+                float(np.mean(planner_rate_icm)))
+            metrics["PPO + ICM"]["mask_rate"].append(
+                float(np.mean(mask_rates_icm)))
+            metrics["PPO + ICM"]["adherence_rate"].append(
+                float(np.mean(adherence_rates_icm)))
+            metrics["PPO + ICM"]["min_dist"].append(
+                float(np.mean(min_dists_icm)))
+            metrics["PPO + ICM"]["spikes"].append(
+                count_intrinsic_spikes(intrinsic_icm)
+            )
+            metrics["PPO + ICM"]["episode_costs"].append(
+                float(np.mean(episode_costs_icm)))
+            metrics["PPO + ICM"]["violation_flags"].append(
+                float(np.mean(violation_flags_icm)))
+            metrics["PPO + ICM"]["first_violation_episode"].append(
+                first_violation_episode_icm
+            )
+            metrics["PPO + ICM"]["coverage"].append(
+                float(np.mean(coverage_icm)))
+            metrics["PPO + ICM"]["episode_time"].append(
+                float(np.mean(episode_times_icm)))
+            metrics["PPO + ICM"]["steps_per_sec"].append(
+                float(np.mean(steps_per_sec_icm)))
+            metrics["PPO + ICM"]["wall_time"].append(
+                float(wall_clock_times_icm[-1]))
+            metrics["PPO + ICM"]["lambda_vals"].append(lambda_log_icm)
+            save_model(
+                ppo_icm_policy,
+                os.path.join(
+                    checkpoint_dir,
+                    f"ppo_icm_{run_seed}.pt"),
+                icm=icm)
+            curve_logs["PPO + ICM"]["rewards"].append(rewards_ppo_icm)
+            curve_logs["PPO + ICM"]["intrinsic"].append(intrinsic_icm)
+            curve_logs["PPO + ICM"]["success"].append(success_icm)
+            curve_logs["PPO + ICM"]["episode_costs"].append(
+                episode_costs_icm)
+            curve_logs["PPO + ICM"]["violation_flags"].append(
+                violation_flags_icm)
+            curve_logs["PPO + ICM"]["lambda"].append(lambda_log_icm)
+            render_episode_video(
+                env,
+                ppo_icm_policy,
+                os.path.join(
+                    video_dir, f"{safe_setting}_ppo_icm_{run_seed}.gif"),
+                H=args.H,
+            )
+            id_res, ood_res = evaluate_on_benchmarks(
+                env,
+                ppo_icm_policy,
+                "test_maps",
+                5,
+                H=args.H,
+                ood_map_folder="ood_maps",
+                num_ood_maps=10,
+            )
+            metrics["PPO + ICM"]["rewards"][run_seed] = [id_res[0]]
+            metrics["PPO + ICM"]["success"][run_seed] = [0.0]
+            metrics["PPO + ICM"]["ood_rewards"][run_seed] = [ood_res[0]]
+            bench["PPO + ICM"].append(id_res[0])
+            bench_ood["PPO + ICM"].append(ood_res[0])
+            plot_policy_coverage(
+                env,
+                ppo_icm_policy,
+                "PPO + ICM",
+                setting["name"],
+                plot_dir,
+                args.H,
+            )
 
             # PPO + Pseudo-count exploration
             print("Training PPO + PC")
@@ -1914,6 +1969,7 @@ def run(args):
                 wall_clock_times_pc,
                 beta_log_pc,
                 lambda_log_pc,
+                episode_data_pc,
             ) = train_agent(
                 env,
                 ppo_pc_policy,
@@ -1947,7 +2003,9 @@ def run(args):
                 clip_epsilon=args.clip_epsilon,
                 gamma=args.gamma,
                 gae_lambda=args.gae_lambda,
+                map_id=0,
             )
+            save_episode_metrics("PPO + PC", run_seed, args.split, episode_data_pc)
             metrics["PPO + PC"]["auc_reward"].append(
                 compute_auc_reward(rewards_pc)
             )
@@ -2047,6 +2105,7 @@ def run(args):
                     wall_clock_times_icm_plan,
                     beta_log_icm_plan,
                     lambda_log_icm_plan,
+                    episode_data_icm_plan,
                 ) = train_agent(
                     env,
                     ppo_icm_planner_policy,
@@ -2080,7 +2139,9 @@ def run(args):
                     clip_epsilon=args.clip_epsilon,
                     gamma=args.gamma,
                     gae_lambda=args.gae_lambda,
+                    map_id=0,
                 )
+                save_episode_metrics("PPO + ICM + Planner", run_seed, args.split, episode_data_icm_plan)
                 metrics["PPO + ICM + Planner"]["auc_reward"].append(
                     compute_auc_reward(rewards_ppo_icm_plan)
                 )
@@ -2199,6 +2260,7 @@ def run(args):
                 wall_clock_times_count,
                 beta_log_count,
                 lambda_log_count,
+                episode_data_count,
             ) = train_agent(
                 env,
                 ppo_count_policy,
@@ -2231,7 +2293,9 @@ def run(args):
                 clip_epsilon=args.clip_epsilon,
                 gamma=args.gamma,
                 gae_lambda=args.gae_lambda,
+                map_id=0,
             )
+            save_episode_metrics("PPO + count", run_seed, args.split, episode_data_count)
             metrics["PPO + count"]["auc_reward"].append(
                 compute_auc_reward(rewards_ppo_count)
             )
@@ -2333,6 +2397,7 @@ def run(args):
                     wall_clock_times_rnd,
                     beta_log_rnd,
                     lambda_log_rnd,
+                    episode_data_rnd,
                 ) = train_agent(
                     env,
                     ppo_rnd_policy,
@@ -2366,7 +2431,9 @@ def run(args):
                     clip_epsilon=args.clip_epsilon,
                     gamma=args.gamma,
                     gae_lambda=args.gae_lambda,
+                    map_id=0,
                 )
+                save_episode_metrics("PPO + RND", run_seed, args.split, episode_data_rnd)
                 metrics["PPO + RND"]["auc_reward"].append(
                     compute_auc_reward(rewards_ppo_rnd)
                 )

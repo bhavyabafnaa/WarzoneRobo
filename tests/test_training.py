@@ -128,6 +128,7 @@ def test_training_one_episode_metrics(tmp_path, budget):
         wall_clock,
         beta_log,
         lambda_log,
+        episode_data,
     ) = metrics
     assert len(rewards) == 1
     assert len(coverage_log) == 1
@@ -297,7 +298,7 @@ def test_beta_schedule_consistency():
         lambda_cost=0.0,
         imagination_k=0,
     )
-    rewards1, *_, beta_log1, lambda_log1 = metrics1
+    rewards1, *_, beta_log1, lambda_log1, _ = metrics1
     assert len(rewards1) == 3
     assert len(lambda_log1) == 3
 
@@ -322,7 +323,7 @@ def test_beta_schedule_consistency():
         lambda_cost=0.0,
         imagination_k=0,
     )
-    rewards2, *_, beta_log2, lambda_log2 = metrics2
+    rewards2, *_, beta_log2, lambda_log2, _ = metrics2
     assert len(rewards2) == 3
     assert len(lambda_log2) == 3
 
