@@ -481,7 +481,6 @@ def parse_args(arg_list: list[str] | None = None):
     parser.add_argument("--grid_size", type=int, default=12)
     parser.add_argument("--num_episodes", type=int, default=500)
     parser.add_argument("--max-steps", dest="max_steps", type=int, default=100)
-    parser.add_argument("--split", type=int, default=0, help="Dataset split identifier")
     parser.add_argument(
         "--split",
         type=int,
