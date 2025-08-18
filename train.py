@@ -226,7 +226,7 @@ EPISODE_COLUMNS = [
 ]
 
 
-def save_episode_metrics(method: str, run_seed: int, split: int, episode_records: list[dict]):
+def save_episode_metrics(method: str, run_seed: int, split: str, episode_records: list[dict]):
     """Save per-episode metrics to a CSV file."""
     if not episode_records:
         return
@@ -402,7 +402,7 @@ def compute_auc_reward(reward_log: list[float]) -> float:
 
 
 def write_aggregate_csv(
-    method: str, data: dict, split: int, out_dir: str = "results/aggregates"
+    method: str, data: dict, split: str, out_dir: str = "results/aggregates"
 ) -> pd.DataFrame:
     """Compute mean and SD for key metrics and write to a CSV file.
 
@@ -412,8 +412,8 @@ def write_aggregate_csv(
         Name of the evaluated method.
     data : dict
         Dictionary containing lists of metric values across runs.
-    split : int
-        Identifier for the dataset split; used in the output filename.
+    split : str
+        Name of the dataset split; used in the output filename.
     out_dir : str, default "results/aggregates"
         Directory where the aggregate CSV will be written.
 
@@ -486,9 +486,10 @@ def parse_args(arg_list: list[str] | None = None):
     parser.add_argument("--max-steps", dest="max_steps", type=int, default=100)
     parser.add_argument(
         "--split",
-        type=int,
-        default=0,
-        help="Dataset split identifier for aggregate metrics",
+        type=str,
+        choices=["train", "test", "ood"],
+        default="train",
+        help="Dataset split name for aggregate metrics",
     )
     parser.add_argument(
         "--cost_weight",
