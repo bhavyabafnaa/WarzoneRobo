@@ -111,6 +111,7 @@ def train_agent(
     allow_early_stop: bool = False,
     clip_epsilon: float = 0.2,
     gae_lambda: float = 0.95,
+    danger_distance: int = 2,
 ):
     """Train a PPO agent with optional curiosity and planning.
 
@@ -338,7 +339,7 @@ def train_agent(
                     for ex, ey in env.enemy_positions
                 )
                 min_dist = min(min_dist, curr_min)
-                if curr_min < 2:
+                if curr_min <= danger_distance:
                     near_miss += 1
             visit_count[x][y] += 1
             count_reward = 1.0 / np.sqrt(visit_count[x][y])
