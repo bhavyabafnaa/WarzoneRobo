@@ -467,24 +467,45 @@ def parse_args(arg_list: list[str] | None = None):
         Optional list of arguments to parse. Useful for tests; when ``None``
         (the default) ``sys.argv`` is used.
 
-    The ``--config`` file is parsed first and any keys inside will set the
-    parser defaults. Command line flags always take precedence, allowing quick
-    overrides without editing the YAML.
+    Configuration can be provided in up to three YAML files. ``--env-config``
+    is loaded first and typically contains environment settings such as grid
+    size or hazard densities. ``--algo-config`` is then applied on top to
+    override or extend those defaults with algorithm-specific hyperparameters.
+    Finally, ``--config`` can be used for a monolithic config file or to make
+    run-specific tweaks. Command line flags always take precedence, allowing
+    quick overrides without editing any YAML files.
 
     Example YAML snippet::
 
         grid_size: 8
         dynamic_risk: true
         add_noise: false
+
+    Example usage::
+
+        python train.py --env-config configs/env_8x8.yaml \
+                         --algo-config configs/algo/lppo.yaml
     """
 
     parser = argparse.ArgumentParser(
         description="Train or evaluate PPO agents")
     parser.add_argument(
+        "--env-config",
+        type=str,
+        help="Path to environment YAML config file",
+        default=None,
+    )
+    parser.add_argument(
+        "--algo-config",
+        type=str,
+        help="Path to algorithm YAML config file",
+        default=None,
+    )
+    parser.add_argument(
         "--config",
         type=str,
-        help="Path to YAML config file",
-        default="configs/default.yaml",
+        help="Path to additional YAML config file",
+        default=None,
     )
     parser.add_argument("--grid_size", type=int, default=12)
     parser.add_argument("--num_episodes", type=int, default=500)
@@ -706,10 +727,18 @@ def parse_args(arg_list: list[str] | None = None):
     # intentionally parse without removing any of the original command line
     # arguments so they can still override the config on the second pass.
     config_args, _ = parser.parse_known_args(arg_list)
+    merged_cfg: dict[str, object] = {}
+    if config_args.env_config and os.path.exists(config_args.env_config):
+        with open(config_args.env_config, "r") as f:
+            merged_cfg.update(yaml.safe_load(f) or {})
+    if config_args.algo_config and os.path.exists(config_args.algo_config):
+        with open(config_args.algo_config, "r") as f:
+            merged_cfg.update(yaml.safe_load(f) or {})
     if config_args.config and os.path.exists(config_args.config):
         with open(config_args.config, "r") as f:
-            cfg = yaml.safe_load(f) or {}
-        parser.set_defaults(**cfg)
+            merged_cfg.update(yaml.safe_load(f) or {})
+    if merged_cfg:
+        parser.set_defaults(**merged_cfg)
 
     # Final parse with config defaults applied; command line flags take
     # precedence over YAML settings.

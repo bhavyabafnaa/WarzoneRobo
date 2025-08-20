@@ -237,6 +237,19 @@ def test_parse_args_danger_distance():
     assert args.danger_distance == 3
 
 
+def test_parse_args_env_algo_config():
+    args = parse_args([
+        "--env-config",
+        "configs/env_8x8.yaml",
+        "--algo-config",
+        "configs/algo/lppo.yaml",
+    ])
+    # grid_size from env config, disable_icm from algo config
+    assert args.grid_size == 8
+    assert args.disable_icm is True
+    assert args.num_episodes == 200
+
+
 def test_train_agent_with_shielding_and_bonus_decay(tmp_path):
     env = GridWorldICM(grid_size=4, max_steps=5)
     os.makedirs("maps", exist_ok=True)
