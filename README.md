@@ -142,6 +142,24 @@ for s in 0 1 2 3 4; do
 done
 ```
 
+### Batch scripts
+The `scripts/` directory contains helper scripts to automate common workflows.
+Run all algorithm configurations sequentially with:
+
+```bash
+./scripts/run_all.sh
+```
+
+After training finishes, evaluate every produced checkpoint on the benchmark
+maps in a consistent order with:
+
+```bash
+./scripts/eval_all.sh
+```
+
+Both scripts iterate deterministically so repeated invocations yield comparable
+results.
+
 ## Running Tests
 Execute the unit tests with:
 ```bash
