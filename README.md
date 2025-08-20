@@ -55,6 +55,12 @@ or
 ```bash
 python train.py --config configs/default.yaml
 ```
+
+Separate environment and algorithm YAMLs can also be combined:
+
+```bash
+python train.py --env-config configs/env_8x8.yaml --algo-config configs/algo/lppo.yaml
+```
 To store generated figures run with `--plot-dir`:
 ```bash
 python train.py --config configs/default.yaml --plot-dir figures
