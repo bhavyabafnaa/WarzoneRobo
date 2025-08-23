@@ -2,6 +2,7 @@ import os
 from torch import optim
 
 import pytest
+import train
 from src.env import GridWorldICM, evaluate_on_benchmarks
 from src.icm import ICMModule
 from src.planner import SymbolicPlanner
@@ -14,6 +15,7 @@ from train import (
     format_mean_ci,
     parse_args,
     save_episode_metrics,
+    run,
 )
 from scipy.stats import ttest_rel
 from statsmodels.stats.multitest import multipletests
@@ -642,3 +644,77 @@ def test_advantages_without_reward_normalization():
     values_scaled = [v * 10 for v in values]
     adv_scaled = compute_gae(rewards_scaled, values_scaled, gamma=0.99, lam=0.95)
     assert np.allclose(np.array(adv_scaled), np.array(adv_raw) * 10)
+
+
+def test_run_skips_saving_none_episode_data(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+
+    # Replace heavy functions with no-ops
+    monkeypatch.setattr(train, "export_benchmark_maps", lambda *a, **k: None)
+    monkeypatch.setattr(train, "visualize_paths_on_benchmark_maps", lambda *a, **k: None)
+    monkeypatch.setattr(train, "plot_policy_coverage", lambda *a, **k: None)
+    monkeypatch.setattr(train, "render_episode_video", lambda *a, **k: None)
+    monkeypatch.setattr(train, "evaluate_on_benchmarks", lambda *a, **k: ((0.0, 0.0), (0.0, 0.0)))
+    monkeypatch.setattr(train, "evaluate_planner_on_maps", lambda *a, **k: ([0.0], [0]))
+    monkeypatch.setattr(train, "plot_heatmap_with_path", lambda *a, **k: None)
+    monkeypatch.setattr(train, "plot_violation_rate", lambda *a, **k: None)
+    monkeypatch.setattr(train, "plot_violation_comparison", lambda *a, **k: None)
+    monkeypatch.setattr(train, "plot_learning_panels", lambda *a, **k: None)
+    monkeypatch.setattr(train, "plot_pareto", lambda *a, **k: None)
+    monkeypatch.setattr(train, "save_pareto_summaries", lambda *a, **k: None)
+    monkeypatch.setattr(train, "append_budget_sweep", lambda *a, **k: None)
+    monkeypatch.setattr(train, "save_violation_curves", lambda *a, **k: None)
+    monkeypatch.setattr(train, "generate_results_table", lambda *a, **k: None)
+
+    def fake_train_agent(*_args, **kwargs):
+        episode_data = None if kwargs.get("use_icm") is True else [{}]
+        default_list = [0.0]
+        default_int = [0]
+        return (
+            default_list,
+            default_list,
+            default_list,
+            default_list,
+            [[]],
+            default_int,
+            default_int,
+            default_list,
+            default_int,
+            default_list,
+            default_list,
+            default_int,
+            default_list,
+            default_list,
+            default_list,
+            0,
+            default_list,
+            default_list,
+            default_list,
+            default_list,
+            default_list,
+            episode_data,
+        )
+
+    monkeypatch.setattr(train, "train_agent", fake_train_agent)
+
+    saved_methods: list[str] = []
+
+    def fake_save(method, _seed, _split, _data):
+        saved_methods.append(method)
+
+    monkeypatch.setattr(train, "save_episode_metrics", fake_save)
+
+    args = parse_args([
+        "--num_episodes",
+        "1",
+        "--max-steps",
+        "1",
+        "--grid_size",
+        "2",
+        "--seeds",
+        "1",
+    ])
+    run(args)
+
+    assert "PPO + ICM" not in saved_methods
+    assert "PPO Only" in saved_methods
