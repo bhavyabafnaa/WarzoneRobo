@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.env import GridWorldICM
 from src.ppo import PPOPolicy
 from src.visualization import (
     render_episode_video,
+    plot_training_curves,
     plot_pareto,
     plot_learning_panels,
     plot_violation_rate,
@@ -134,3 +136,9 @@ def test_plot_ablation_radar(tmp_path):
     output = tmp_path / "radar.pdf"
     plot_ablation_radar(metrics_df, str(output))
     assert output.exists()
+
+
+def test_plot_training_curves_requires_output_path():
+    metrics = {"Reward": [[0.0, 1.0]]}
+    with pytest.raises(ValueError):
+        plot_training_curves(metrics, None)
