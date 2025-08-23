@@ -1947,35 +1947,35 @@ def run(args):
                 ppo_icm_policy = PPOPolicy(input_dim, action_dim)
                 opt_icm_policy = optim.Adam(
                     ppo_icm_policy.parameters(), lr=args.learning_rate)
-            episode_data_icm = None
-            (
-                rewards_ppo_icm,
-                intrinsic_icm,
-                _,
-                _,
-                paths_icm,
-                _,
-                success_icm,
-                planner_rate_icm,
-                mask_counts_icm,
-                mask_rates_icm,
-                adherence_rates_icm,
-                coverage_icm,
-                min_dists_icm,
-                episode_costs_icm,
-                violation_flags_icm,
-                first_violation_episode_icm,
-                episode_times_icm,
-                steps_per_sec_icm,
-                wall_clock_times_icm,
-                beta_log_icm,
-                lambda_log_icm,
-                episode_data_icm,
-            ) = train_agent(
-                env,
-                ppo_icm_policy,
-                icm,
-                planner,
+                episode_data_icm = None
+                (
+                    rewards_ppo_icm,
+                    intrinsic_icm,
+                    _,
+                    _,
+                    paths_icm,
+                    _,
+                    success_icm,
+                    planner_rate_icm,
+                    mask_counts_icm,
+                    mask_rates_icm,
+                    adherence_rates_icm,
+                    coverage_icm,
+                    min_dists_icm,
+                    episode_costs_icm,
+                    violation_flags_icm,
+                    first_violation_episode_icm,
+                    episode_times_icm,
+                    steps_per_sec_icm,
+                    wall_clock_times_icm,
+                    beta_log_icm,
+                    lambda_log_icm,
+                    episode_data_icm,
+                ) = train_agent(
+                    env,
+                    ppo_icm_policy,
+                    icm,
+                    planner,
                     opt_icm_policy,
                     opt_icm_policy,
                     use_icm=True,
@@ -2007,81 +2007,81 @@ def run(args):
                     danger_distance=args.danger_distance,
                     map_id=env.map_id,
                 )
-            if episode_data_icm is not None:
-                save_episode_metrics("PPO + ICM", run_seed, args.split, episode_data_icm)
-            metrics["PPO + ICM"]["auc_reward"].append(
-                compute_auc_reward(rewards_ppo_icm)
-            )
-            metrics["PPO + ICM"]["planner_pct"].append(
-                float(np.mean(planner_rate_icm)))
-            metrics["PPO + ICM"]["masked_action_rate"].append(
-                float(np.mean(mask_rates_icm)))
-            metrics["PPO + ICM"]["planner_adherence_pct"].append(
-                float(np.mean(adherence_rates_icm)))
-            metrics["PPO + ICM"]["min_dist"].append(
-                float(np.mean(min_dists_icm)))
-            metrics["PPO + ICM"]["spikes"].append(
-                count_intrinsic_spikes(intrinsic_icm)
-            )
-            metrics["PPO + ICM"]["episode_costs"].append(
-                float(np.mean(episode_costs_icm)))
-            metrics["PPO + ICM"]["violation_flags"].append(
-                float(np.mean(violation_flags_icm)))
-            metrics["PPO + ICM"]["first_violation_episode"].append(
-                first_violation_episode_icm
-            )
-            metrics["PPO + ICM"]["unique_cells"].append(
-                float(np.mean(coverage_icm)))
-            metrics["PPO + ICM"]["episode_time"].append(
-                float(np.mean(episode_times_icm)))
-            metrics["PPO + ICM"]["steps_per_sec"].append(
-                float(np.mean(steps_per_sec_icm)))
-            metrics["PPO + ICM"]["wall_time"].append(
-                float(wall_clock_times_icm[-1]))
-            metrics["PPO + ICM"]["lambda_vals"].append(lambda_log_icm)
-            save_model(
-                ppo_icm_policy,
-                os.path.join(
-                    checkpoint_dir,
-                    f"ppo_icm_{run_seed}.pt"),
-                icm=icm)
-            curve_logs["PPO + ICM"]["rewards"].append(rewards_ppo_icm)
-            curve_logs["PPO + ICM"]["intrinsic"].append(intrinsic_icm)
-            curve_logs["PPO + ICM"]["success"].append(success_icm)
-            curve_logs["PPO + ICM"]["episode_costs"].append(
-                episode_costs_icm)
-            curve_logs["PPO + ICM"]["violation_flags"].append(
-                violation_flags_icm)
-            curve_logs["PPO + ICM"]["lambda"].append(lambda_log_icm)
-            render_episode_video(
-                env,
-                ppo_icm_policy,
-                os.path.join(
-                    video_dir, f"{safe_setting}_ppo_icm_{run_seed}.gif"),
-                H=args.H,
-            )
-            id_res, ood_res = evaluate_on_benchmarks(
-                env,
-                ppo_icm_policy,
-                "test_maps",
-                5,
-                H=args.H,
-                ood_map_folder="ood_maps",
-                num_ood_maps=10,
-            )
-            metrics["PPO + ICM"]["rewards"][run_seed] = [id_res[0]]
-            metrics["PPO + ICM"]["success"][run_seed] = [0.0]
-            metrics["PPO + ICM"]["ood_rewards"][run_seed] = [ood_res[0]]
-            bench["PPO + ICM"].append(id_res[0])
-            bench_ood["PPO + ICM"].append(ood_res[0])
-            plot_policy_coverage(
-                env,
-                ppo_icm_policy,
-                "PPO + ICM",
-                setting["name"],
-                plot_dir,
-                args.H,
-            )
+                if episode_data_icm is not None:
+                    save_episode_metrics("PPO + ICM", run_seed, args.split, episode_data_icm)
+                metrics["PPO + ICM"]["auc_reward"].append(
+                    compute_auc_reward(rewards_ppo_icm)
+                )
+                metrics["PPO + ICM"]["planner_pct"].append(
+                    float(np.mean(planner_rate_icm)))
+                metrics["PPO + ICM"]["masked_action_rate"].append(
+                    float(np.mean(mask_rates_icm)))
+                metrics["PPO + ICM"]["planner_adherence_pct"].append(
+                    float(np.mean(adherence_rates_icm)))
+                metrics["PPO + ICM"]["min_dist"].append(
+                    float(np.mean(min_dists_icm)))
+                metrics["PPO + ICM"]["spikes"].append(
+                    count_intrinsic_spikes(intrinsic_icm)
+                )
+                metrics["PPO + ICM"]["episode_costs"].append(
+                    float(np.mean(episode_costs_icm)))
+                metrics["PPO + ICM"]["violation_flags"].append(
+                    float(np.mean(violation_flags_icm)))
+                metrics["PPO + ICM"]["first_violation_episode"].append(
+                    first_violation_episode_icm
+                )
+                metrics["PPO + ICM"]["unique_cells"].append(
+                    float(np.mean(coverage_icm)))
+                metrics["PPO + ICM"]["episode_time"].append(
+                    float(np.mean(episode_times_icm)))
+                metrics["PPO + ICM"]["steps_per_sec"].append(
+                    float(np.mean(steps_per_sec_icm)))
+                metrics["PPO + ICM"]["wall_time"].append(
+                    float(wall_clock_times_icm[-1]))
+                metrics["PPO + ICM"]["lambda_vals"].append(lambda_log_icm)
+                save_model(
+                    ppo_icm_policy,
+                    os.path.join(
+                        checkpoint_dir,
+                        f"ppo_icm_{run_seed}.pt"),
+                    icm=icm)
+                curve_logs["PPO + ICM"]["rewards"].append(rewards_ppo_icm)
+                curve_logs["PPO + ICM"]["intrinsic"].append(intrinsic_icm)
+                curve_logs["PPO + ICM"]["success"].append(success_icm)
+                curve_logs["PPO + ICM"]["episode_costs"].append(
+                    episode_costs_icm)
+                curve_logs["PPO + ICM"]["violation_flags"].append(
+                    violation_flags_icm)
+                curve_logs["PPO + ICM"]["lambda"].append(lambda_log_icm)
+                render_episode_video(
+                    env,
+                    ppo_icm_policy,
+                    os.path.join(
+                        video_dir, f"{safe_setting}_ppo_icm_{run_seed}.gif"),
+                    H=args.H,
+                )
+                id_res, ood_res = evaluate_on_benchmarks(
+                    env,
+                    ppo_icm_policy,
+                    "test_maps",
+                    5,
+                    H=args.H,
+                    ood_map_folder="ood_maps",
+                    num_ood_maps=10,
+                )
+                metrics["PPO + ICM"]["rewards"][run_seed] = [id_res[0]]
+                metrics["PPO + ICM"]["success"][run_seed] = [0.0]
+                metrics["PPO + ICM"]["ood_rewards"][run_seed] = [ood_res[0]]
+                bench["PPO + ICM"].append(id_res[0])
+                bench_ood["PPO + ICM"].append(ood_res[0])
+                plot_policy_coverage(
+                    env,
+                    ppo_icm_policy,
+                    "PPO + ICM",
+                    setting["name"],
+                    plot_dir,
+                    args.H,
+                )
 
             # PPO + Pseudo-count exploration
             print("Training PPO + PC")
