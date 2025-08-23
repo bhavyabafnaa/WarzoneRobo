@@ -47,10 +47,18 @@ def _save_fig(fig: plt.Figure, output_path: str, also_png: bool = False) -> None
 
 
 def _finalize_fig(fig: plt.Figure, output_path: str | None, show: bool = False) -> None:
-    """Save and close a figure."""
+    """Save and close a figure.
 
-    if output_path is not None:
-        _save_fig(fig, output_path)
+    Raises
+    ------
+    ValueError
+        If ``output_path`` is ``None``.
+    """
+
+    if output_path is None:
+        raise ValueError("output_path must be specified to save the figure")
+
+    _save_fig(fig, output_path)
     plt.close(fig)
 
 
