@@ -85,6 +85,11 @@ The definitive experiment matrix is:
 | `planner` | PPO + Planner |
 | `icm_planner` | PPO + ICM + Planner |
 
+Every run rotates deterministically across all 15 generated training maps by
+default. Variants with the same run seed therefore receive the same map and
+environment-randomness sequence. The five separately generated benchmark maps
+are held out from training and used only for deterministic evaluation.
+
 ### Generating benchmark tables
 After training, `train.py` evaluates each agent greedily on the same exported
 benchmark maps with matched environment seeds. Per-seed records and aggregated
@@ -115,7 +120,7 @@ are marked with `*` in the table and those below `0.01` with `**`.
 The demo notebook experiments with different combinations of these components to evaluate their effect on success rate and exploration.
 
 ## Environment features
-The grid world includes optional *dynamic risk* and *dynamic cost* modes. When enabled, hazard locations and traversal costs change over time so agents cannot memorize a single map. A small `survival_reward` of `0.05` is given each step. Benchmark maps can be exported with `export_benchmark_maps` and loaded later for evaluation. The environment's `render()` method returns RGB frames so that `render_episode_video` can produce GIFs of agent behavior.
+The grid world includes optional *dynamic risk* and *dynamic cost* modes. When enabled, hazard locations and traversal costs change over time. A small `survival_reward` of `0.05` is given each step. Training maps and held-out benchmark maps can be exported with `export_benchmark_maps`; training rotates across the former and evaluation loads only the latter. The environment's `render()` method returns RGB frames so that `render_episode_video` can produce GIFs of agent behavior.
 
 ## Success metric
 An episode is marked as a **success** only when the agent survives for all

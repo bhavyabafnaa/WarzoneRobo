@@ -80,6 +80,7 @@ def train_agent(
     final_planner_bonus: float = 0.1,
     reset_env: bool = True,
     training_map_path: str = "maps/map_00.npz",
+    training_map_paths: list[str] | None = None,
 ):
     """Train PPO with optional intrinsic reward and risk-gated planning.
 
@@ -113,20 +114,32 @@ def train_agent(
     initial_bonus = max(0.0, float(initial_bonus))
     final_planner_bonus = max(0.0, float(final_planner_bonus))
 
-    os.makedirs(os.path.dirname(training_map_path) or ".", exist_ok=True)
-    if reset_env:
-        env.reset(seed=seed)
-        env.save_map(training_map_path)
+    if training_map_paths is None:
+        os.makedirs(os.path.dirname(training_map_path) or ".", exist_ok=True)
+        if reset_env:
+            env.reset(seed=seed)
+            env.save_map(training_map_path)
+        episode_maps = [training_map_path]
+    else:
+        if not training_map_paths:
+            raise ValueError("training_map_paths must contain at least one map")
+        missing_maps = [path for path in training_map_paths if not os.path.exists(path)]
+        if missing_maps:
+            raise FileNotFoundError(
+                "Training maps do not exist: " + ", ".join(missing_maps)
+            )
+        episode_maps = list(training_map_paths)
 
     for episode in range(num_episodes):
-        # A fixed base map is paired with a deterministic but distinct enemy
-        # trajectory in each episode.  Every variant sees the same sequence
-        # for a given run seed.
+        # Rotate through the complete generated training set.  The seed-based
+        # offset and episode RNG are deterministic, so every variant sees the
+        # same map and enemy-trajectory sequence for a given run seed.
         episode_seed = seed * 1_000_003 + episode
+        episode_map = episode_maps[(episode + seed) % len(episode_maps)]
         torch.manual_seed(episode_seed)
         obs, _ = env.reset(
             seed=episode_seed,
-            load_map_path=training_map_path,
+            load_map_path=episode_map,
             add_noise=add_noise,
         )
 

@@ -117,7 +117,6 @@ def parse_args(argv=None):
     parser.add_argument("--results-dir", default="results")
     parser.add_argument("--checkpoints-dir", default="checkpoints")
     parser.add_argument("--videos-dir", default="videos")
-    parser.add_argument("--training-map-dir", default="maps")
     parser.add_argument("--train-map-dir", default="train_maps")
     parser.add_argument("--benchmark-map-dir", default="test_maps")
     parser.add_argument(
@@ -238,10 +237,10 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
         "risk_weight": args.risk_weight,
         "revisit_penalty": args.revisit_penalty,
     }
-    training_map = os.path.join(
-        args.training_map_dir,
-        f"train_seed_{run_seed}.npz",
-    )
+    training_maps = [
+        os.path.join(args.train_map_dir, f"map_{map_index:02d}.npz")
+        for map_index in range(args.num_train_maps)
+    ]
 
     print(f"Training {spec['label']} (seed={run_seed})")
     metrics = train_agent(
@@ -269,7 +268,8 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
         logger=logger,
         initial_bonus=args.initial_planner_bonus,
         final_planner_bonus=args.final_planner_bonus,
-        training_map_path=training_map,
+        reset_env=False,
+        training_map_paths=training_maps,
     )
     (
         rewards,
@@ -323,6 +323,7 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
         "Seed": run_seed,
         "Variant": variant_key,
         "Model": spec["label"],
+        "Training Maps": args.num_train_maps,
         "Train Reward Mean": float(np.mean(rewards)),
         "Train Reward Episode Std": sample_std(rewards),
         "Final Reward Mean": float(np.mean(rewards[-final_window:])),
@@ -448,11 +449,14 @@ def summarize_runs(
 def main(argv=None):
     args = parse_args(argv)
     seeds = resolve_seeds(args)
+    if args.num_train_maps < 1:
+        raise ValueError("--num_train_maps must be at least 1")
+    if args.num_benchmark_maps < 1:
+        raise ValueError("--num_benchmark_maps must be at least 1")
     for directory in [
         args.results_dir,
         args.checkpoints_dir,
         args.videos_dir,
-        args.training_map_dir,
         args.train_map_dir,
         args.benchmark_map_dir,
     ]:

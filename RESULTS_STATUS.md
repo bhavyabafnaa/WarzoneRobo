@@ -34,6 +34,10 @@ Run the corrected six-variant matrix over seeds 0–4:
 python train.py --config configs/default.yaml --seeds 0 1 2 3 4
 ```
 
+Each run deterministically rotates across all 15 generated training maps. The
+five benchmark maps are held out from training, and matched variants receive
+the same training-map and environment-randomness sequence for each run seed.
+
 Only the newly generated per-seed records and summaries may be transferred to
 the manuscript. The primary confirmatory comparison should be declared before
 inspection; for the current paper that comparison is PPO versus PPO + ICM +

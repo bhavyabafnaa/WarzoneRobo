@@ -31,6 +31,17 @@ class FixedActionPolicy(PPOPolicy):
         return self.fixed_action, distribution.log_prob(action), value
 
 
+class RecordingMapEnv(GridWorldICM):
+    def __init__(self, *args, **kwargs):
+        self.loaded_map_paths = []
+        super().__init__(*args, **kwargs)
+
+    def reset(self, *args, load_map_path=None, **kwargs):
+        if load_map_path is not None:
+            self.loaded_map_paths.append(str(load_map_path))
+        return super().reset(*args, load_map_path=load_map_path, **kwargs)
+
+
 def test_short_training_loop(tmp_path):
     env = GridWorldICM(grid_size=4, max_steps=10)
     map_path = tmp_path / "training_map.npz"
@@ -87,6 +98,46 @@ def test_training_one_episode_metrics(tmp_path):
 
     rewards, _, _, _, _, _, _, _ = metrics
     assert len(rewards) == 1
+
+
+def test_training_rotates_through_all_generated_maps(tmp_path):
+    map_paths = []
+    map_generator = GridWorldICM(grid_size=2, max_steps=1)
+    for map_index in range(3):
+        map_generator.reset(seed=map_index)
+        map_path = tmp_path / f"map_{map_index:02d}.npz"
+        map_generator.save_map(map_path)
+        map_paths.append(str(map_path))
+
+    env = RecordingMapEnv(grid_size=2, max_steps=1)
+    input_dim = 4 * env.grid_size * env.grid_size
+    policy = PPOPolicy(input_dim, 4)
+    icm = ICMModule(input_dim, 4)
+    planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
+    optimizer = optim.Adam(policy.parameters(), lr=1e-3)
+
+    train_agent(
+        env,
+        policy,
+        icm,
+        planner,
+        optimizer,
+        None,
+        use_icm=False,
+        use_planner=False,
+        num_episodes=5,
+        seed=0,
+        reset_env=False,
+        training_map_paths=map_paths,
+    )
+
+    assert env.loaded_map_paths == [
+        map_paths[0],
+        map_paths[1],
+        map_paths[2],
+        map_paths[0],
+        map_paths[1],
+    ]
 
 
 def test_success_flag_survival(tmp_path):
