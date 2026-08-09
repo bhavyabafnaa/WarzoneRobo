@@ -26,20 +26,37 @@ Because these issues affect both method identity and measured outcomes, the old
 means, standard deviations and p-values are provisional historical values—not
 results from the corrected algorithm.
 
-## Required regeneration
+## Corrected five-seed rerun
 
-Run the corrected six-variant matrix over seeds 0–4:
+The corrected six-variant matrix over seeds 0–4 has been completed. PPO + ICM
++ Planner was numerically highest in training reward, but its paired advantage
+over PPO was small and not statistically significant. Held-out success did not
+improve, and all greedy policies selected the same constant action. Therefore
+the corrected run supports neither hybrid superiority nor a useful generalized
+policy.
+
+## Confirmatory regeneration
+
+The next experiment is declared in `configs/confirmatory.yaml`:
 
 ```bash
-python train.py --config configs/default.yaml --seeds 0 1 2 3 4
+python train.py --config configs/confirmatory.yaml --validate-only
+python train.py --config configs/confirmatory.yaml
 ```
 
-Each run deterministically rotates across all 15 generated training maps. The
-five benchmark maps are held out from training, and matched variants receive
-the same training-map and environment-randomness sequence for each run seed.
+It retains pure survival as the task and introduces random safe starts, 30/10/30
+disjoint train/validation/test maps, 40 matched training seeds, 500 episodes,
+and 20 matched stochastic rollouts per held-out map. Greedy rollouts are
+secondary diagnostics.
+
+The primary outcome is stochastic held-out survival rate. The declared hybrid
+must exceed every other variant by at least 0.05 absolute survival probability,
+with paired significance after Holm correction. Reward comparisons and the
+ICM-by-planner interaction are secondary analyses. A pre-training map gate
+rejects constant-action-solvable maps and map sets on which a safe non-learning
+heuristic cannot survive.
 
 Only the newly generated per-seed records and summaries may be transferred to
-the manuscript. The primary confirmatory comparison should be declared before
-inspection; for the current paper that comparison is PPO versus PPO + ICM +
-Planner. Other variant comparisons should be described as ablations unless a
-multiple-comparison procedure is selected.
+the manuscript. The 40-seed outcomes must not be used to tune this declared
+protocol; any later changes require a newly versioned protocol and independent
+test maps.

@@ -81,6 +81,7 @@ def train_agent(
     reset_env: bool = True,
     training_map_path: str = "maps/map_00.npz",
     training_map_paths: list[str] | None = None,
+    episode_records: list[dict] | None = None,
 ):
     """Train PPO with optional intrinsic reward and risk-gated planning.
 
@@ -137,7 +138,7 @@ def train_agent(
         episode_seed = seed * 1_000_003 + episode
         episode_map = episode_maps[(episode + seed) % len(episode_maps)]
         torch.manual_seed(episode_seed)
-        obs, _ = env.reset(
+        obs, reset_info = env.reset(
             seed=episode_seed,
             load_map_path=episode_map,
             add_noise=add_noise,
@@ -343,6 +344,24 @@ def train_agent(
             planner_consultations / ppo_decisions if ppo_decisions else 0.0
         )
         planner_usage_rate.append(planner_percent)
+        if episode_records is not None:
+            episode_records.append(
+                {
+                    "Episode": episode + 1,
+                    "Training Map": episode_map,
+                    "Training Map Index": (episode + seed) % len(episode_maps),
+                    "Environment Seed": episode_seed,
+                    "Start Row": reset_info["start_position"][0],
+                    "Start Column": reset_info["start_position"][1],
+                    "Environment Reward": total_ext_reward,
+                    "Intrinsic Reward": intrinsic_log,
+                    "Steps": step_count,
+                    "PPO Decisions": ppo_decisions,
+                    "Planner Consultations": planner_consultations,
+                    "Planner Consultation Rate": planner_percent,
+                    "Success": success_flags[-1],
+                }
+            )
 
         success_rate = float(np.mean(success_flags))
         if logger is not None:

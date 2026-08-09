@@ -1,6 +1,10 @@
 import numpy as np
 
-from src.env import GridWorldICM, evaluate_on_benchmarks
+from src.env import (
+    GridWorldICM,
+    evaluate_on_benchmarks,
+    evaluate_trivial_policies,
+)
 from src.ppo import PPOPolicy
 
 
@@ -87,3 +91,109 @@ def test_benchmark_evaluation_is_deterministic_and_reports_success(tmp_path):
 
     assert first == second
     assert len(first) == 4
+
+
+def test_random_starts_are_seeded_safe_and_not_fixed_to_corner():
+    env = GridWorldICM(
+        grid_size=5,
+        random_start=True,
+        boundary_mines=True,
+    )
+    first_positions = []
+    for seed in range(8):
+        _, info = env.reset(seed=seed)
+        position = info["start_position"]
+        first_positions.append(position)
+        assert not env.mine_map[position]
+        assert list(position) not in env.enemy_positions
+        assert 0 < position[0] < env.grid_size - 1
+        assert 0 < position[1] < env.grid_size - 1
+
+    _, repeated = env.reset(seed=3)
+    assert repeated["start_position"] == first_positions[3]
+    assert len(set(first_positions)) > 1
+
+
+def test_survival_bonus_aligns_reward_with_survival():
+    env = GridWorldICM(
+        grid_size=3,
+        max_steps=1,
+        survival_reward=0.5,
+        terminal_survival_bonus=5.0,
+    )
+    env.cost_map = np.zeros((3, 3))
+    env.risk_map = np.zeros((3, 3))
+    env.mine_map = np.zeros((3, 3), dtype=bool)
+    env.terrain_map = np.full((3, 3), "normal")
+    env.enemy_positions = []
+
+    _, reward, done, _, info = env.step(1)
+
+    assert done is True
+    assert info["survived"] is True
+    assert np.isclose(reward, 5.5)
+
+
+def test_repeated_stochastic_evaluation_is_reproducible(tmp_path):
+    map_folder = tmp_path / "test_maps"
+    map_folder.mkdir()
+    env = GridWorldICM(grid_size=4, max_steps=3, random_start=True, seed=0)
+    for index in range(2):
+        env.reset(seed=20 + index)
+        env.save_map(map_folder / f"map_{index:02d}.npz")
+
+    policy = PPOPolicy(4 * env.grid_size * env.grid_size, 4)
+    first = evaluate_on_benchmarks(
+        env,
+        policy,
+        str(map_folder),
+        num_maps=2,
+        seed=700,
+        deterministic=False,
+        return_success=True,
+        num_rollouts=3,
+        return_records=True,
+    )
+    second = evaluate_on_benchmarks(
+        env,
+        policy,
+        str(map_folder),
+        num_maps=2,
+        seed=700,
+        deterministic=False,
+        return_success=True,
+        num_rollouts=3,
+        return_records=True,
+    )
+
+    assert first == second
+    assert len(first[1]) == 6
+    assert {record["Evaluation Mode"] for record in first[1]} == {"stochastic"}
+
+
+def test_boundary_hazards_defeat_constant_action_policies(tmp_path):
+    map_folder = tmp_path / "maps"
+    map_folder.mkdir()
+    env = GridWorldICM(
+        grid_size=4,
+        max_steps=4,
+        random_start=True,
+        boundary_mines=True,
+    )
+    env.reset(seed=0)
+    env.save_map(map_folder / "map_00.npz")
+
+    records = evaluate_trivial_policies(
+        env,
+        str(map_folder),
+        num_maps=1,
+        num_rollouts=3,
+        seed=100,
+        split="test",
+    )
+    constant_records = [
+        record for record in records if record["Policy"].startswith("constant_")
+    ]
+
+    assert len(constant_records) == 12
+    assert all(record["Success"] == 0 for record in constant_records)

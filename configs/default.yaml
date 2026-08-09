@@ -2,6 +2,7 @@ grid_size: 8
 num_episodes: 200
 max_steps: 100
 survival_reward: 0.05
+terminal_survival_bonus: 0.0
 cost_weight: 3.0
 risk_weight: 3.0
 revisit_penalty: 2.0
@@ -19,6 +20,8 @@ final_planner_bonus: 0.1
 dynamic_risk: true
 dynamic_cost: true
 add_noise: false
+random_start: false
+boundary_mines: false
 seed: 42
 variants:
   - ppo
@@ -28,5 +31,14 @@ variants:
   - planner
   - icm_planner
 num_train_maps: 15
+num_validation_maps: 5
 num_benchmark_maps: 5
 evaluation_seed: 10000
+evaluation_rollouts: 1
+greedy_evaluation_rollouts: 1
+trivial_policy_rollouts: 5
+max_constant_success: 1.0
+minimum_safe_heuristic_success: 0.0
+minimum_reward_effect: 0.0
+minimum_success_effect: 0.0
+primary_variant: icm_planner
