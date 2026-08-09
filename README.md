@@ -70,9 +70,12 @@ correct optimizer, shifted state/action pairs in the PPO buffer, mixed planner
 actions into the on-policy objective, included planner shaping in reported
 environment reward, and did not fully control benchmark randomness.
 
-The implementation has been corrected, but the full five-seed experiment must
-be rerun before numerical claims are restored here or used in the paper. See
-[`RESULTS_STATUS.md`](RESULTS_STATUS.md) for the exact validity boundary.
+The corrected five-seed rerun did not establish superiority of PPO + ICM +
+Planner. It produced no statistically significant advantage, and every greedy
+held-out policy collapsed to the same constant action. Those findings motivate
+the preregistered pure-survival protocol below; they are not evidence that the
+hybrid is better. See [`RESULTS_STATUS.md`](RESULTS_STATUS.md) for the exact
+validity boundary.
 
 The definitive experiment matrix is:
 
@@ -85,30 +88,71 @@ The definitive experiment matrix is:
 | `planner` | PPO + Planner |
 | `icm_planner` | PPO + ICM + Planner |
 
-Every run rotates deterministically across all 15 generated training maps by
-default. Variants with the same run seed therefore receive the same map and
-environment-randomness sequence. The five separately generated benchmark maps
-are held out from training and used only for deterministic evaluation.
+The confirmatory configuration uses 30 training, 10 validation, and 30 test
+maps with disjoint generation seeds. Every run rotates deterministically across
+all training maps. Variants with the same run seed receive matched maps,
+environment randomness, evaluation starts, and action-sampling seeds.
 
-### Generating benchmark tables
-After training, `train.py` evaluates each agent greedily on the same exported
-benchmark maps with matched environment seeds. Per-seed records and aggregated
-tables are written separately:
+### Confirmatory pure-survival protocol
 
-* `results/training_runs.csv`
-* `results/benchmark_runs.csv`
-* `results/training_results.csv` and `.html`
-* `results/benchmark_results.csv` and `.html`
+`configs/confirmatory.yaml` declares the experiment before results are
+inspected:
+
+* six variants, 40 matched training seeds, and 500 episodes per run;
+* random safe starts and boundary hazards to prevent constant-action success;
+* 20 stochastic rollouts per held-out map as the primary evaluation, with
+  greedy evaluation reported secondarily;
+* held-out survival rate as the primary outcome, defined as reaching
+  `max_steps` without hitting a mine or enemy;
+* PPO + ICM + Planner compared with every other variant using paired tests and
+  Holm family-wise error correction; and
+* a required improvement of at least 0.05 in absolute survival rate for each
+  comparison, in addition to corrected statistical significance.
+
+Before training, an automatic validity gate evaluates four constant-action
+policies, a random policy, and a safe non-learning heuristic on every split.
+Constant-action survival must remain at or below 0.10 and safe-heuristic
+survival must be at least 0.10. This rejects both degenerate and demonstrably
+unsolvable map sets.
+
+Validate only the maps and protocol with:
 
 ```bash
-python train.py --config configs/default.yaml --num-seeds 5
+python train.py --config configs/confirmatory.yaml --validate-only
+```
+
+Run the preregistered matrix without changing its configuration after viewing
+outcomes:
+
+```bash
+python train.py --config configs/confirmatory.yaml
+```
+
+### Generated evidence
+
+After training, `train.py` evaluates each agent stochastically on validation
+and test maps and also runs the secondary greedy test. Exact episode telemetry,
+per-seed records, aggregate tables, and confirmatory tests are written
+separately:
+
+* `results/training_runs.csv`
+* `results/training_episodes.csv`
+* `results/evaluation_episodes.csv`
+* `results/validation_runs.csv`, `test_runs.csv`, and `greedy_test_runs.csv`
+* `results/confirmatory_tests.csv`
+* `results/interaction_tests.csv`
+* `results/confirmatory_decision.yaml`
+* `results/protocol_manifest.yaml`
+
+```bash
+python train.py --config configs/confirmatory.yaml
 # CSV and HTML tables are written to the `results/` folder
 ```
 
-Use `--stat-test` to choose the statistical test applied to the aggregated
-results. Available options are `paired`, `welch`, `mannwhitney` and `anova`. The
-default is a paired t-test against the PPO baseline. P-values below `0.05`
-are marked with `*` in the table and those below `0.01` with `**`.
+Use `--stat-test` to choose the comparison shown in the descriptive aggregate
+tables. Available options are `paired`, `welch`, `mannwhitney` and `anova`. The
+confirmatory decision does not use this option: it always applies the declared
+paired, Holm-corrected pure-survival tests in `confirmatory_tests.csv`.
 
 ## Components
 * **PPO** – The main reinforcement learning algorithm used to learn policies from environment interaction.
@@ -120,7 +164,15 @@ are marked with `*` in the table and those below `0.01` with `**`.
 The demo notebook experiments with different combinations of these components to evaluate their effect on success rate and exploration.
 
 ## Environment features
-The grid world includes optional *dynamic risk* and *dynamic cost* modes. When enabled, hazard locations and traversal costs change over time. A small `survival_reward` of `0.05` is given each step. Training maps and held-out benchmark maps can be exported with `export_benchmark_maps`; training rotates across the former and evaluation loads only the latter. The environment's `render()` method returns RGB frames so that `render_episode_video` can produce GIFs of agent behavior.
+The grid world includes optional *dynamic risk* and *dynamic cost* modes. When
+enabled, hazard locations and traversal costs change over time. The default
+exploratory configuration gives a `survival_reward` of `0.05` per step. The
+confirmatory configuration uses `0.5` plus a terminal survival bonus of `5.0`
+to align learning feedback with the pure-survival endpoint. Training,
+validation, and held-out test maps can be exported with
+`export_benchmark_maps`; training rotates across only the first split. The
+environment's `render()` method returns RGB frames so that
+`render_episode_video` can produce GIFs of agent behavior.
 
 ## Success metric
 An episode is marked as a **success** only when the agent survives for all

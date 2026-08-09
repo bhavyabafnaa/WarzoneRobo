@@ -16,6 +16,9 @@ class GridWorldICM:
         reward_clip: tuple[float, float] = (-10, 100),
         max_steps: int = 100,
         survival_reward: float = 0.05,
+        terminal_survival_bonus: float = 0.0,
+        random_start: bool = False,
+        boundary_mines: bool = False,
         seed: int | None = None,
     ) -> None:
         self.grid_size = grid_size
@@ -24,6 +27,9 @@ class GridWorldICM:
         self.reward_clip = reward_clip
         self.max_steps = max_steps
         self.survival_reward = survival_reward
+        self.terminal_survival_bonus = terminal_survival_bonus
+        self.random_start = random_start
+        self.boundary_mines = boundary_mines
         if seed is None:
             seed = 0
         self.seed(seed)
@@ -53,6 +59,9 @@ class GridWorldICM:
             self.mine_map = (
                 self.np_random.random((self.grid_size, self.grid_size)) < 0.05
             )
+            if self.boundary_mines:
+                self.mine_map[[0, -1], :] = True
+                self.mine_map[:, [0, -1]] = True
             self.terrain_map[
                 self.np_random.random((self.grid_size, self.grid_size)) < 0.15
             ] = "mud"
@@ -67,10 +76,28 @@ class GridWorldICM:
             noise = self.np_random.normal(0, 0.05, self.cost_map.shape)
             self.cost_map = np.clip(self.cost_map + noise, 0.0, 1.0)
 
-        self.agent_pos = [0, 0]
+        self.agent_pos = self._select_start_position()
         self.steps = 0
 
-        return self._get_obs(), {}
+        return self._get_obs(), {"start_position": tuple(self.agent_pos)}
+
+    def _select_start_position(self) -> list[int]:
+        enemy_cells = {tuple(position) for position in self.enemy_positions}
+        safe_cells = [
+            (row, column)
+            for row in range(self.grid_size)
+            for column in range(self.grid_size)
+            if not self.mine_map[row, column] and (row, column) not in enemy_cells
+        ]
+        if not safe_cells:
+            raise ValueError("Map has no safe starting cell")
+
+        if self.random_start:
+            index = int(self.np_random.integers(len(safe_cells)))
+            return list(safe_cells[index])
+        if (0, 0) in safe_cells:
+            return [0, 0]
+        return list(safe_cells[0])
 
     def load_map(self, filepath: str = "map_data.npz") -> None:
         data = np.load(filepath, allow_pickle=True)
@@ -169,8 +196,12 @@ class GridWorldICM:
                 )
 
         done = self.steps >= self.max_steps
+        info = {}
+        if done:
+            reward += self.terminal_survival_bonus
+            info["survived"] = True
 
-        return self._get_obs(), self._clip_reward(reward), done, False, {}
+        return self._get_obs(), self._clip_reward(reward), done, False, info
 
     def _clip_reward(self, r: float) -> float:
         return np.clip(r, self.reward_clip[0], self.reward_clip[1])
@@ -313,11 +344,13 @@ def visualize_paths_on_benchmark_maps(
 def export_benchmark_maps(
     env: GridWorldICM,
     num_train: int = 15,
+    num_validation: int = 0,
     num_test: int = 5,
     train_folder: str = "train_maps/",
+    validation_folder: str | None = None,
     test_folder: str = "test_maps/",
 ) -> None:
-    """Generate benchmark maps for training and testing.
+    """Generate disjoint maps for training, validation and testing.
 
     Parameters
     ----------
@@ -325,10 +358,14 @@ def export_benchmark_maps(
         Environment instance used to generate the maps.
     num_train : int, optional
         Number of training maps to create. Defaults to ``15``.
+    num_validation : int, optional
+        Number of validation maps to create. Defaults to ``0``.
     num_test : int, optional
         Number of test maps to create. Defaults to ``5``.
     train_folder : str, optional
         Directory where training maps are saved.
+    validation_folder : str, optional
+        Directory where validation maps are saved when requested.
     test_folder : str, optional
         Directory where test maps are saved.
     """
@@ -338,9 +375,17 @@ def export_benchmark_maps(
         env.reset(seed=i)
         env.save_map(os.path.join(train_folder, f"map_{i:02d}.npz"))
 
+    if num_validation:
+        if validation_folder is None:
+            raise ValueError("validation_folder is required for validation maps")
+        os.makedirs(validation_folder, exist_ok=True)
+        for i in range(num_validation):
+            env.reset(seed=num_train + i)
+            env.save_map(os.path.join(validation_folder, f"map_{i:02d}.npz"))
+
     os.makedirs(test_folder, exist_ok=True)
     for i in range(num_test):
-        env.reset(seed=num_train + i)
+        env.reset(seed=num_train + num_validation + i)
         env.save_map(os.path.join(test_folder, f"map_{i:02d}.npz"))
 
 
@@ -352,45 +397,202 @@ def evaluate_on_benchmarks(
     seed: int = 10_000,
     deterministic: bool = True,
     return_success: bool = False,
+    num_rollouts: int = 1,
+    return_records: bool = False,
+    split: str = "test",
 ):
     """Evaluate a policy on fixed maps with controlled environment randomness.
 
-    Greedy actions are used by default so repeated evaluation of the same
-    checkpoint is deterministic.  Each map receives a distinct, reproducible
-    seed for enemy motion and optional observation-map noise.
+    Greedy actions are used by default.  Stochastic evaluation samples the
+    learned categorical policy using a separate, reproducible Torch stream.
+    Every map/rollout pair receives matched environment and action seeds so
+    variants can be compared within run seed.
     """
     import torch
 
+    if num_rollouts < 1:
+        raise ValueError("num_rollouts must be at least 1")
+
     rewards = []
     successes = []
-    for i in range(num_maps):
-        map_path = f"{map_folder}/map_{i:02d}.npz"
-        obs, _ = env.reset(seed=seed + i, load_map_path=map_path)
-        done = False
-        total_reward = 0.0
-        info = {}
-        while not done:
-            state_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
-            with torch.no_grad():
-                if deterministic:
-                    logits, _ = policy(state_tensor)
-                    action = int(torch.argmax(logits, dim=-1).item())
-                else:
-                    action, _, _ = policy.act(state_tensor)
-            obs, reward, done, _, info = env.step(action)
-            total_reward += reward
-        rewards.append(total_reward)
-        survived = env.steps >= env.max_steps and not info.get("dead", False)
-        successes.append(1.0 if survived else 0.0)
+    records = []
+    was_training = policy.training
+    policy.eval()
+    try:
+        for map_index in range(num_maps):
+            map_path = os.path.join(map_folder, f"map_{map_index:02d}.npz")
+            for rollout in range(num_rollouts):
+                episode_index = map_index * num_rollouts + rollout
+                episode_seed = seed + episode_index
+                torch.manual_seed(500_000_000 + episode_seed)
+                obs, reset_info = env.reset(
+                    seed=episode_seed,
+                    load_map_path=map_path,
+                )
+                done = False
+                total_reward = 0.0
+                info = {}
+                actions = []
+                while not done:
+                    state_tensor = torch.tensor(
+                        obs,
+                        dtype=torch.float32,
+                    ).unsqueeze(0)
+                    with torch.no_grad():
+                        logits, _ = policy(state_tensor)
+                        if deterministic:
+                            action = int(torch.argmax(logits, dim=-1).item())
+                        else:
+                            distribution = torch.distributions.Categorical(
+                                logits=logits
+                            )
+                            action = int(distribution.sample().item())
+                    actions.append(action)
+                    obs, reward, done, _, info = env.step(action)
+                    total_reward += reward
+                survived = env.steps >= env.max_steps and not info.get("dead", False)
+                success = 1.0 if survived else 0.0
+                rewards.append(total_reward)
+                successes.append(success)
+                action_counts = np.bincount(actions, minlength=4)
+                records.append(
+                    {
+                        "Split": split,
+                        "Evaluation Mode": (
+                            "greedy" if deterministic else "stochastic"
+                        ),
+                        "Map": map_index,
+                        "Rollout": rollout,
+                        "Environment Seed": episode_seed,
+                        "Start Row": reset_info["start_position"][0],
+                        "Start Column": reset_info["start_position"][1],
+                        "Reward": total_reward,
+                        "Success": success,
+                        "Steps": env.steps,
+                        "Unique Actions": int(np.count_nonzero(action_counts)),
+                        "Dominant Action Fraction": float(
+                            action_counts.max() / max(len(actions), 1)
+                        ),
+                    }
+                )
+    finally:
+        if was_training:
+            policy.train()
 
     reward_mean = float(np.mean(rewards))
     reward_std = float(np.std(rewards, ddof=1)) if len(rewards) > 1 else 0.0
     if not return_success:
-        return reward_mean, reward_std
+        summary = (reward_mean, reward_std)
+        return (summary, records) if return_records else summary
 
     success_mean = float(np.mean(successes))
     success_std = float(np.std(successes, ddof=1)) if len(successes) > 1 else 0.0
-    return reward_mean, reward_std, success_mean, success_std
+    summary = (reward_mean, reward_std, success_mean, success_std)
+    return (summary, records) if return_records else summary
+
+
+def evaluate_trivial_policies(
+    env: GridWorldICM,
+    map_folder: str,
+    num_maps: int,
+    num_rollouts: int,
+    seed: int,
+    split: str,
+) -> list[dict]:
+    """Evaluate constant-action and random policies as a task-validity gate."""
+    if num_rollouts < 1:
+        raise ValueError("num_rollouts must be at least 1")
+
+    records = []
+    policies = [f"constant_{action}" for action in range(4)] + [
+        "random",
+        "safe_heuristic",
+    ]
+    for policy_index, policy_name in enumerate(policies):
+        for map_index in range(num_maps):
+            map_path = os.path.join(map_folder, f"map_{map_index:02d}.npz")
+            for rollout in range(num_rollouts):
+                episode_index = map_index * num_rollouts + rollout
+                episode_seed = seed + episode_index
+                obs, reset_info = env.reset(
+                    seed=episode_seed,
+                    load_map_path=map_path,
+                )
+                del obs
+                action_rng = np.random.default_rng(
+                    900_000_000 + policy_index * 1_000_000 + episode_seed
+                )
+                visit_counts = np.zeros((env.grid_size, env.grid_size), dtype=int)
+                visit_counts[tuple(env.agent_pos)] = 1
+                done = False
+                total_reward = 0.0
+                info = {}
+                while not done:
+                    if policy_name == "safe_heuristic":
+                        candidates = []
+                        row, column = env.agent_pos
+                        for action, (row_delta, column_delta) in enumerate(
+                            [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                        ):
+                            next_row = row + row_delta
+                            next_column = column + column_delta
+                            if not (
+                                0 <= next_row < env.grid_size
+                                and 0 <= next_column < env.grid_size
+                            ):
+                                continue
+                            if env.mine_map[next_row, next_column]:
+                                continue
+                            if [next_row, next_column] in env.enemy_positions:
+                                continue
+                            enemy_proximity = 0.0
+                            if env.enemy_positions:
+                                nearest_enemy = min(
+                                    abs(next_row - enemy_row)
+                                    + abs(next_column - enemy_column)
+                                    for enemy_row, enemy_column in env.enemy_positions
+                                )
+                                enemy_proximity = 1.0 / max(nearest_enemy, 1)
+                            score = (
+                                float(env.cost_map[next_row, next_column])
+                                + float(env.risk_map[next_row, next_column])
+                                + 0.25 * visit_counts[next_row, next_column]
+                                + enemy_proximity
+                            )
+                            candidates.append((score, action))
+                        if candidates:
+                            best_score = min(score for score, _ in candidates)
+                            best_actions = [
+                                action
+                                for score, action in candidates
+                                if np.isclose(score, best_score)
+                            ]
+                            action = int(action_rng.choice(best_actions))
+                        else:
+                            action = int(action_rng.integers(4))
+                    elif policy_name == "random":
+                        action = int(action_rng.integers(4))
+                    else:
+                        action = int(policy_name[-1])
+                    _, reward, done, _, info = env.step(action)
+                    total_reward += reward
+                    visit_counts[tuple(env.agent_pos)] += 1
+                survived = env.steps >= env.max_steps and not info.get("dead", False)
+                records.append(
+                    {
+                        "Split": split,
+                        "Policy": policy_name,
+                        "Map": map_index,
+                        "Rollout": rollout,
+                        "Environment Seed": episode_seed,
+                        "Start Row": reset_info["start_position"][0],
+                        "Start Column": reset_info["start_position"][1],
+                        "Reward": total_reward,
+                        "Success": 1.0 if survived else 0.0,
+                        "Steps": env.steps,
+                    }
+                )
+    return records
 
 
 def plot_model_performance(

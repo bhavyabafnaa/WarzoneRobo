@@ -1,5 +1,7 @@
 __pycache__/
 .ipynb_checkpoints/
+experiments/
+WarzoneRobo_corrected_results_*.zip
 *.pyc
 *.pyo
 *~
