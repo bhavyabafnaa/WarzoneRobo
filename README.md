@@ -56,6 +56,28 @@ dynamic_cost: true     # cost near mines decays and rises dynamically
 add_noise: true         # perturb loaded maps on reset
 ```
 
+## Results
+
+The clearest win came from combining curiosity with planning. PPO + ICM +
+Planner reached a **31.5% success rate**, up from **17.5%** for PPO alone:
+
+| Model | Mean training success | Standard deviation | Mean training reward |
+| --- | ---: | ---: | ---: |
+| PPO Only | 17.5% | 14.8% | -16.07 |
+| PPO + ICM | 18.6% | 16.5% | -15.61 |
+| PPO + ICM + Planner | **31.5%** | 19.1% | **-12.97** |
+
+That is a gain of **14.0 percentage points**—an **80% relative improvement** over
+the PPO baseline. The hybrid agent also achieved the best mean training reward,
+improving it from -16.07 to -12.97. Together, these results are an encouraging
+sign that curiosity helps the agent explore while the planner turns that
+exploration into more successful behavior.
+
+The reward improvement was statistically significant in this experiment
+(*p* = 0.026); the success-rate result is promising but needs more runs to
+confirm (*p* = 0.122). The full results, variability, and ablations are available
+in [`results/training_results.csv`](results/training_results.csv).
+
 ### Generating benchmark tables
 After training, `train.py` evaluates each agent on the exported benchmark maps.
 The metrics are saved to `results/benchmark_results.csv` and, when the output
