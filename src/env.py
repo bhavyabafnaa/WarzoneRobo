@@ -1,7 +1,5 @@
 import os
-from typing import List, Tuple
 
-import gym
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import patches
@@ -15,7 +13,7 @@ class GridWorldICM:
         grid_size: int = 6,
         dynamic_risk: bool = False,
         dynamic_cost: bool = False,
-        reward_clip: Tuple[float, float] = (-10, 100),
+        reward_clip: tuple[float, float] = (-10, 100),
         max_steps: int = 100,
         survival_reward: float = 0.05,
         seed: int | None = None,
@@ -32,7 +30,9 @@ class GridWorldICM:
         self.reset()
 
     def seed(self, seed: int | None = None) -> int:
-        self.np_random, seed = gym.utils.seeding.np_random(seed)
+        if seed is None:
+            seed = 0
+        self.np_random = np.random.default_rng(seed)
         return seed
 
     def reset(
@@ -40,7 +40,7 @@ class GridWorldICM:
         seed: int | None = None,
         load_map_path: str | None = None,
         add_noise: bool = False,
-    ) -> Tuple[np.ndarray, dict]:
+    ) -> tuple[np.ndarray, dict]:
         if seed is not None:
             self.seed(seed)
 
@@ -49,20 +49,22 @@ class GridWorldICM:
         else:
             self.cost_map = np.ones((self.grid_size, self.grid_size)) * 0.3
             self.risk_map = np.zeros((self.grid_size, self.grid_size))
-            self.terrain_map = np.full(
-                (self.grid_size, self.grid_size), "normal")
-            self.mine_map = self.np_random.random(
-                (self.grid_size, self.grid_size)) < 0.05
-            self.terrain_map[self.np_random.random(
-                (self.grid_size, self.grid_size)) < 0.15] = "mud"
-            self.terrain_map[self.np_random.random(
-                (self.grid_size, self.grid_size)) < 0.15] = "water"
+            self.terrain_map = np.full((self.grid_size, self.grid_size), "normal")
+            self.mine_map = (
+                self.np_random.random((self.grid_size, self.grid_size)) < 0.05
+            )
+            self.terrain_map[
+                self.np_random.random((self.grid_size, self.grid_size)) < 0.15
+            ] = "mud"
+            self.terrain_map[
+                self.np_random.random((self.grid_size, self.grid_size)) < 0.15
+            ] = "water"
             self.enemy_positions = [[self.grid_size // 2, self.grid_size // 2]]
 
         if add_noise:
-            noise = np.random.normal(0, 0.05, self.risk_map.shape)
+            noise = self.np_random.normal(0, 0.05, self.risk_map.shape)
             self.risk_map = np.clip(self.risk_map + noise, 0.0, 1.0)
-            noise = np.random.normal(0, 0.05, self.cost_map.shape)
+            noise = self.np_random.normal(0, 0.05, self.cost_map.shape)
             self.cost_map = np.clip(self.cost_map + noise, 0.0, 1.0)
 
         self.agent_pos = [0, 0]
@@ -104,9 +106,7 @@ class GridWorldICM:
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 nx, ny = mx + dx, my + dy
                 if 0 <= nx < self.grid_size and 0 <= ny < self.grid_size:
-                    self.cost_map[nx, ny] = min(
-                        1.0, self.cost_map[nx, ny] + 0.25
-                    )
+                    self.cost_map[nx, ny] = min(1.0, self.cost_map[nx, ny] + 0.25)
 
     def step(self, action: int, terrain_decay: float = 1.0):
         x, y = self.agent_pos
@@ -134,9 +134,7 @@ class GridWorldICM:
                 for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                     nx, ny = ex + dx, ey + dy
                     if 0 <= nx < self.grid_size and 0 <= ny < self.grid_size:
-                        self.risk_map[nx, ny] = min(
-                            1.0, self.risk_map[nx, ny] + 0.25
-                        )
+                        self.risk_map[nx, ny] = min(1.0, self.risk_map[nx, ny] + 0.25)
 
         self.update_cost_map()
         cost = np.clip(self.cost_map[x][y], 0, 1)
@@ -194,6 +192,7 @@ class GridWorldICM:
 
     def render(self) -> np.ndarray:
         import matplotlib
+
         matplotlib.use("Agg")
         from matplotlib.backends.backend_agg import (
             FigureCanvasAgg as FigureCanvas,
@@ -247,10 +246,9 @@ class GridWorldICM:
 
         canvas.draw()
         width, height = fig.get_size_inches() * fig.get_dpi()
-        img = (
-            np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
-            .reshape(int(height), int(width), 4)[..., :3]
-        )
+        img = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8).reshape(
+            int(height), int(width), 4
+        )[..., :3]
         plt.close(fig)
         return img
 
@@ -263,20 +261,18 @@ def visualize_paths_on_benchmark_maps(
     grid_cols: int = 3,
     save: bool = False,
 ):
-    from matplotlib.collections import LineCollection
     import torch
+    from matplotlib.collections import LineCollection
 
     grid_rows = int(np.ceil(num_maps / grid_cols))
-    fig, axs = plt.subplots(
-        grid_rows, grid_cols, figsize=(
-            grid_cols * 4, grid_rows * 4))
+    _, axs = plt.subplots(grid_rows, grid_cols, figsize=(grid_cols * 4, grid_rows * 4))
     axs = axs.flatten()
 
     for i in range(num_maps):
         map_path = os.path.join(map_folder, f"map_{i:02d}.npz")
         obs, _ = env.reset(load_map_path=map_path)
         path = [tuple(env.agent_pos)]
-        rewards: List[float] = []
+        rewards: list[float] = []
 
         done = False
         while not done:
@@ -297,11 +293,8 @@ def visualize_paths_on_benchmark_maps(
 
         ax = axs[i]
         ax.imshow(
-            np.zeros(
-                (env.grid_size,
-                 env.grid_size)),
-            cmap="Greys",
-            origin="lower")
+            np.zeros((env.grid_size, env.grid_size)), cmap="Greys", origin="lower"
+        )
         ax.add_collection(lc)
         ax.set_title(f"Map {i}")
         ax.axis("off")
@@ -356,26 +349,53 @@ def evaluate_on_benchmarks(
     policy,
     map_folder: str = "maps/",
     num_maps: int = 10,
-) -> Tuple[float, float]:
+    seed: int = 10_000,
+    deterministic: bool = True,
+    return_success: bool = False,
+):
+    """Evaluate a policy on fixed maps with controlled environment randomness.
+
+    Greedy actions are used by default so repeated evaluation of the same
+    checkpoint is deterministic.  Each map receives a distinct, reproducible
+    seed for enemy motion and optional observation-map noise.
+    """
     import torch
+
     rewards = []
+    successes = []
     for i in range(num_maps):
         map_path = f"{map_folder}/map_{i:02d}.npz"
-        obs, _ = env.reset(load_map_path=map_path)
+        obs, _ = env.reset(seed=seed + i, load_map_path=map_path)
         done = False
         total_reward = 0.0
+        info = {}
         while not done:
             state_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
-            action, _, _ = policy.act(state_tensor)
-            obs, reward, done, _, _ = env.step(action)
+            with torch.no_grad():
+                if deterministic:
+                    logits, _ = policy(state_tensor)
+                    action = int(torch.argmax(logits, dim=-1).item())
+                else:
+                    action, _, _ = policy.act(state_tensor)
+            obs, reward, done, _, info = env.step(action)
             total_reward += reward
         rewards.append(total_reward)
-    return float(np.mean(rewards)), float(np.std(rewards))
+        survived = env.steps >= env.max_steps and not info.get("dead", False)
+        successes.append(1.0 if survived else 0.0)
+
+    reward_mean = float(np.mean(rewards))
+    reward_std = float(np.std(rewards, ddof=1)) if len(rewards) > 1 else 0.0
+    if not return_success:
+        return reward_mean, reward_std
+
+    success_mean = float(np.mean(successes))
+    success_std = float(np.std(successes, ddof=1)) if len(successes) > 1 else 0.0
+    return reward_mean, reward_std, success_mean, success_std
 
 
 def plot_model_performance(
-    models: List,
-    model_names: List[str],
+    models: list,
+    model_names: list[str],
     env: GridWorldICM,
     map_folder: str = "maps/",
     num_maps: int = 10,
@@ -384,22 +404,15 @@ def plot_model_performance(
     std_devs = []
 
     for policy in models:
-        mean_r, std_r = evaluate_on_benchmarks(
-            env, policy, map_folder, num_maps)
+        mean_r, std_r = evaluate_on_benchmarks(env, policy, map_folder, num_maps)
         avg_rewards.append(mean_r)
         std_devs.append(std_r)
 
     x = np.arange(len(model_names))
     plt.figure(figsize=(8, 5))
     plt.bar(
-        x,
-        avg_rewards,
-        yerr=std_devs,
-        capsize=5,
-        color=[
-            "gray",
-            "skyblue",
-            "green"])
+        x, avg_rewards, yerr=std_devs, capsize=5, color=["gray", "skyblue", "green"]
+    )
     plt.xticks(x, model_names)
     plt.ylabel("Average Reward")
     plt.title("Model Performance on Benchmark Maps")

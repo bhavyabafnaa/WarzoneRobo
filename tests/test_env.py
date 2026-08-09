@@ -1,5 +1,7 @@
 import numpy as np
-from src.env import GridWorldICM
+
+from src.env import GridWorldICM, evaluate_on_benchmarks
+from src.ppo import PPOPolicy
 
 
 def test_step_boundaries_and_rewards():
@@ -53,3 +55,35 @@ def test_survival_reward_positive():
     env.enemy_positions = []
     _, reward, _, _, _ = env.step(1)
     assert reward > 0
+
+
+def test_benchmark_evaluation_is_deterministic_and_reports_success(tmp_path):
+    map_folder = tmp_path / "test_maps"
+    map_folder.mkdir()
+    env = GridWorldICM(grid_size=3, max_steps=4, seed=0)
+    for index in range(2):
+        env.reset(seed=10 + index)
+        env.save_map(map_folder / f"map_{index:02d}.npz")
+
+    policy = PPOPolicy(4 * env.grid_size * env.grid_size, 4)
+    first = evaluate_on_benchmarks(
+        env,
+        policy,
+        str(map_folder),
+        num_maps=2,
+        seed=500,
+        deterministic=True,
+        return_success=True,
+    )
+    second = evaluate_on_benchmarks(
+        env,
+        policy,
+        str(map_folder),
+        num_maps=2,
+        seed=500,
+        deterministic=True,
+        return_success=True,
+    )
+
+    assert first == second
+    assert len(first) == 4

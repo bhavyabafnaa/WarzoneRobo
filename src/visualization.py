@@ -1,10 +1,11 @@
 import os
+
+import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
-import imageio
 
 
 def _stack_logs(logs: list[list[float]] | None, name: str) -> pd.DataFrame:
@@ -13,8 +14,9 @@ def _stack_logs(logs: list[list[float]] | None, name: str) -> pd.DataFrame:
         return pd.DataFrame()
     frames = []
     for idx, log in enumerate(logs):
-        frames.append(pd.DataFrame(
-            {"Episode": np.arange(len(log)), name: log, "Seed": idx}))
+        frames.append(
+            pd.DataFrame({"Episode": np.arange(len(log)), name: log, "Seed": idx})
+        )
     return pd.concat(frames, ignore_index=True)
 
 
@@ -28,14 +30,17 @@ def plot_training_curves(
 
     if reward_logs and not isinstance(reward_logs[0], (list, np.ndarray)):
         reward_logs = [reward_logs]  # backwards compatibility
-    if intrinsic_logs and intrinsic_logs and not isinstance(
-            intrinsic_logs[0], (list, np.ndarray)):
+    if (
+        intrinsic_logs
+        and intrinsic_logs
+        and not isinstance(intrinsic_logs[0], (list, np.ndarray))
+    ):
         intrinsic_logs = [intrinsic_logs]
     if success_logs and not isinstance(success_logs[0], (list, np.ndarray)):
         success_logs = [success_logs]
 
     sns.set(style="darkgrid")
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
     reward_df = _stack_logs(reward_logs, "Value")
     sns.lineplot(
@@ -97,7 +102,7 @@ def plot_heatmap_with_path(env, path, output_path: str | None = None):
     xs = [p[1] for p in path]
     ys = [p[0] for p in path]
 
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    _, axs = plt.subplots(1, 2, figsize=(10, 5))
     for ax, data, title in zip(
         axs,
         [env.cost_map, env.risk_map],
@@ -131,6 +136,7 @@ def generate_results_table(df: pd.DataFrame, output_path: str) -> None:
     os.makedirs(os.path.dirname(base) or ".", exist_ok=True)
 
     if "Reward p-value" in df.columns:
+
         def _mark(p: float) -> str:
             if pd.isna(p):
                 return ""
@@ -163,11 +169,8 @@ def generate_results_table(df: pd.DataFrame, output_path: str) -> None:
 
 
 def render_episode_video(
-        env,
-        policy,
-        output_path: str,
-        max_steps: int = 100,
-        seed: int | None = None) -> None:
+    env, policy, output_path: str, max_steps: int = 100, seed: int | None = None
+) -> None:
     """Run one episode and save a GIF of the agent interacting with the env."""
     obs, _ = env.reset(seed=seed)
     frames = [env.render()]
