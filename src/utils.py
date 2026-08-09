@@ -1,5 +1,5 @@
 import os
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 import torch
@@ -17,13 +17,14 @@ def save_model(policy, path, icm=None, rnd=None):
 
 
 def load_model(
-        policy_class,
-        input_dim,
-        action_dim,
-        path,
-        icm_class=None,
-        rnd_class=None,
-        device=None):
+    policy_class,
+    input_dim,
+    action_dim,
+    path,
+    icm_class=None,
+    rnd_class=None,
+    device=None,
+):
     """Load policy and exploration modules from checkpoint."""
     checkpoint = torch.load(path, map_location=device)
     policy = policy_class(input_dim, action_dim)
@@ -40,8 +41,8 @@ def load_model(
 
 
 def count_intrinsic_spikes(
-        values: Sequence[float],
-        threshold_factor: float = 1.5) -> int:
+    values: Sequence[float], threshold_factor: float = 1.5
+) -> int:
     """Return the number of intrinsic reward spikes.
 
     A spike is any value exceeding ``threshold_factor`` times the mean of

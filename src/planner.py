@@ -2,7 +2,12 @@ import numpy as np
 
 
 class SymbolicPlanner:
-    """Scoring-based planner that favors low cost and low risk cells."""
+    """One-step heuristic planner that favors low-cost, low-risk cells.
+
+    This is a local action selector, not a multi-step A* or Dijkstra path
+    planner.  At each invocation it scores every valid neighboring cell and
+    returns the lowest-scoring action.
+    """
 
     def __init__(
         self,
@@ -35,14 +40,10 @@ class SymbolicPlanner:
             cost = self.cost_map[i][j]
             risk = self.risk_map[i][j]
             revisit = self.revisit_penalty if self.visited_map[i][j] else 0
-            # Candidate score is weighted sum of cost and risk only
-            return (
-                self.cost_weight * cost
-                + self.risk_weight * risk
-                + revisit
-            )
+            # J(s') = w_c C(s') + w_r R(s') + w_v I_visited(s')
+            return self.cost_weight * cost + self.risk_weight * risk + revisit
 
-        best_score = float('inf')
+        best_score = float("inf")
         best_action = None
         for action, (dx, dy) in directions.items():
             nx, ny = x + dx, y + dy

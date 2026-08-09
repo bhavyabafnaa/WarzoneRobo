@@ -1,6 +1,6 @@
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 
 class ICMModule(nn.Module):
@@ -29,10 +29,8 @@ class ICMModule(nn.Module):
         )
 
     def forward(
-            self,
-            state: torch.Tensor,
-            next_state: torch.Tensor,
-            action: torch.Tensor):
+        self, state: torch.Tensor, next_state: torch.Tensor, action: torch.Tensor
+    ):
         phi_s = self.encoder(state)
         phi_s_next = self.encoder(next_state)
 
@@ -43,14 +41,20 @@ class ICMModule(nn.Module):
 
         forward_input = torch.cat([phi_s, action_onehot], dim=-1)
         pred_phi_next = self.forward_model(forward_input)
-        forward_loss = F.mse_loss(pred_phi_next, phi_s_next)
 
-        curiosity = F.mse_loss(
+        # The target feature is detached so the forward model cannot reduce
+        # its error by moving both sides of the objective together.  The
+        # per-transition prediction error is the intrinsic reward.  Do not
+        # min-max normalize it here: training currently evaluates one
+        # transition at a time, for which min == max and the old
+        # normalization collapsed every ICM reward to exactly zero.
+        target_phi_next = phi_s_next.detach()
+        forward_error = F.mse_loss(
             pred_phi_next,
-            phi_s_next,
-            reduction="none").mean(
-            dim=1)
-        curiosity = (curiosity - curiosity.min()) / \
-            (curiosity.max() - curiosity.min() + 1e-8)
+            target_phi_next,
+            reduction="none",
+        ).mean(dim=1)
+        forward_loss = forward_error.mean()
+        curiosity = forward_error.detach()
 
         return curiosity, forward_loss, inverse_loss

@@ -1,6 +1,6 @@
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 
 class RNDModule(nn.Module):
@@ -26,8 +26,6 @@ class RNDModule(nn.Module):
             target_output = self.target(state)
         pred_output = self.predictor(state)
         intrinsic_reward = F.mse_loss(
-            pred_output,
-            target_output,
-            reduction="none").mean(
-            dim=1)
+            pred_output, target_output, reduction="none"
+        ).mean(dim=1)
         return intrinsic_reward, pred_output, target_output
