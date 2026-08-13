@@ -98,6 +98,11 @@ def parse_args(argv=None):
     parser.add_argument("--add_noise", action="store_true")
     parser.add_argument("--random_start", action="store_true")
     parser.add_argument("--boundary_mines", action="store_true")
+    parser.add_argument("--start_margin", type=int, default=0)
+    parser.add_argument("--start_mine_clearance", type=int, default=0)
+    parser.add_argument("--start_enemy_clearance", type=int, default=0)
+    parser.add_argument("--initial_training_horizon", type=int, default=None)
+    parser.add_argument("--map_seed_base", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--seeds",
@@ -129,6 +134,7 @@ def parse_args(argv=None):
     parser.add_argument("--minimum_safe_heuristic_success", type=float, default=0.0)
     parser.add_argument("--minimum_reward_effect", type=float, default=0.0)
     parser.add_argument("--minimum_success_effect", type=float, default=0.0)
+    parser.add_argument("--minimum_calibration_test_success", type=float, default=0.0)
     parser.add_argument(
         "--primary_variant",
         choices=list(VARIANTS),
@@ -214,6 +220,9 @@ def build_environment(args, seed: int) -> GridWorldICM:
         terminal_survival_bonus=args.terminal_survival_bonus,
         random_start=args.random_start,
         boundary_mines=args.boundary_mines,
+        start_margin=args.start_margin,
+        start_mine_clearance=args.start_mine_clearance,
+        start_enemy_clearance=args.start_enemy_clearance,
         seed=seed,
     )
 
@@ -222,7 +231,7 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
     spec = VARIANTS[variant_key]
     set_seed(run_seed)
     env = build_environment(args, run_seed)
-    input_dim = 4 * args.grid_size * args.grid_size
+    input_dim = env.observation_size
     action_dim = 4
 
     # The policy initialization is identical across variants for each seed.
@@ -301,6 +310,7 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
         logger=logger,
         initial_bonus=args.initial_planner_bonus,
         final_planner_bonus=args.final_planner_bonus,
+        initial_training_horizon=args.initial_training_horizon,
         reset_env=False,
         training_map_paths=training_maps,
         episode_records=episode_records,
@@ -563,7 +573,7 @@ def summarize_runs(
 
 def write_protocol_manifest(args, seeds: list[int]) -> None:
     manifest = {
-        "protocol": "confirmatory-pure-survival-v1",
+        "protocol": "confirmatory-pure-survival-v2",
         "python": sys.version.split()[0],
         "seeds": seeds,
         "declared_primary_comparison": (
@@ -702,6 +712,31 @@ def write_run_view(
     )
 
 
+def write_calibration_decision(runs: pd.DataFrame, args) -> dict:
+    """Record whether every variant escaped the pure-survival floor."""
+    success_by_variant = (
+        runs.groupby("Variant")["Test Success Mean"].mean().sort_index()
+    )
+    threshold = args.minimum_calibration_test_success
+    decision = {
+        "calibration_passed": bool((success_by_variant >= threshold).all()),
+        "criterion": (
+            "every selected variant meets the minimum held-out survival threshold"
+        ),
+        "minimum_test_success": threshold,
+        "test_success_by_variant": {
+            variant: float(success) for variant, success in success_by_variant.items()
+        },
+    }
+    with open(
+        os.path.join(args.results_dir, "calibration_decision.yaml"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        yaml.safe_dump(decision, handle, sort_keys=True)
+    return decision
+
+
 def main(argv=None):
     args = parse_args(argv)
     seeds = resolve_seeds(args)
@@ -720,6 +755,16 @@ def main(argv=None):
         raise ValueError("--max_constant_success must be between 0 and 1")
     if not 0 <= args.minimum_safe_heuristic_success <= 1:
         raise ValueError("--minimum_safe_heuristic_success must be between 0 and 1")
+    if not 0 <= args.minimum_calibration_test_success <= 1:
+        raise ValueError("--minimum_calibration_test_success must be between 0 and 1")
+    clearance_arguments = {
+        "--start_margin": args.start_margin,
+        "--start_mine_clearance": args.start_mine_clearance,
+        "--start_enemy_clearance": args.start_enemy_clearance,
+    }
+    for argument, value in clearance_arguments.items():
+        if value < 0:
+            raise ValueError(f"{argument} must be non-negative")
     if args.primary_variant not in args.variants:
         raise ValueError("--primary_variant must be included in --variants")
 
@@ -742,6 +787,7 @@ def main(argv=None):
         num_train=args.num_train_maps,
         num_validation=args.num_validation_maps,
         num_test=args.num_benchmark_maps,
+        seed_base=args.map_seed_base,
         train_folder=args.train_map_dir,
         validation_folder=args.validation_map_dir,
         test_folder=args.benchmark_map_dir,
@@ -887,6 +933,12 @@ def main(argv=None):
         encoding="utf-8",
     ) as handle:
         yaml.safe_dump(decision, handle, sort_keys=True)
+
+    calibration = write_calibration_decision(runs, args)
+    if not calibration["calibration_passed"]:
+        raise RuntimeError(
+            "Calibration failed; at least one variant remains at the survival floor"
+        )
 
     if args.plot_dir:
         for variant_key, logs in curve_logs.items():

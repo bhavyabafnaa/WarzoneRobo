@@ -24,8 +24,10 @@ class FixedActionPolicy(PPOPolicy):
         super().__init__(input_dim, action_dim)
         self.fixed_action = fixed_action
 
-    def act(self, x):
+    def act(self, x, action_mask=None):
         logits, value = self.forward(x)
+        if action_mask is not None:
+            logits = logits.masked_fill(~action_mask.bool(), -1e9)
         distribution = torch.distributions.Categorical(logits=logits)
         action = torch.tensor(self.fixed_action)
         return self.fixed_action, distribution.log_prob(action), value
@@ -47,7 +49,7 @@ def test_short_training_loop(tmp_path):
     map_path = tmp_path / "training_map.npz"
     env.save_map(map_path)
 
-    input_dim = 4 * env.grid_size * env.grid_size
+    input_dim = env.observation_size
     action_dim = 4
     policy = PPOPolicy(input_dim, action_dim)
     icm = ICMModule(input_dim, action_dim)
@@ -76,7 +78,7 @@ def test_training_one_episode_metrics(tmp_path):
     map_path = tmp_path / "training_map.npz"
     env.save_map(map_path)
 
-    input_dim = 4 * env.grid_size * env.grid_size
+    input_dim = env.observation_size
     action_dim = 4
     policy = PPOPolicy(input_dim, action_dim)
     icm = ICMModule(input_dim, action_dim)
@@ -110,7 +112,7 @@ def test_training_rotates_through_all_generated_maps(tmp_path):
         map_paths.append(str(map_path))
 
     env = RecordingMapEnv(grid_size=2, max_steps=1)
-    input_dim = 4 * env.grid_size * env.grid_size
+    input_dim = env.observation_size
     policy = PPOPolicy(input_dim, 4)
     icm = ICMModule(input_dim, 4)
     planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
@@ -149,7 +151,7 @@ def test_success_flag_survival(tmp_path):
     map_path = tmp_path / "training_map.npz"
     env.save_map(map_path)
 
-    input_dim = 4 * env.grid_size * env.grid_size
+    input_dim = env.observation_size
     action_dim = 4
     policy = PPOPolicy(input_dim, action_dim)
     icm = ICMModule(input_dim, action_dim)
@@ -184,8 +186,8 @@ def test_training_update_uses_state_where_action_was_selected(tmp_path):
     env.save_map(map_path)
     initial_obs, _ = env.reset(seed=0, load_map_path=map_path)
 
-    policy = RecordingPolicy(4 * env.grid_size * env.grid_size, 4)
-    icm = ICMModule(4 * env.grid_size * env.grid_size, 4)
+    policy = RecordingPolicy(env.observation_size, 4)
+    icm = ICMModule(env.observation_size, 4)
     planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
     optimizer = optim.Adam(policy.parameters(), lr=1e-3)
 
@@ -226,7 +228,7 @@ def make_high_risk_start_env(tmp_path):
 
 def test_planner_does_not_override_policy_action(tmp_path):
     env, map_path = make_high_risk_start_env(tmp_path)
-    input_dim = 4 * env.grid_size * env.grid_size
+    input_dim = env.observation_size
     policy = FixedActionPolicy(input_dim, 4, fixed_action=0)
     icm = ICMModule(input_dim, 4)
     planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
@@ -254,7 +256,7 @@ def test_planner_does_not_override_policy_action(tmp_path):
 def test_planner_bonus_is_not_reported_as_environment_reward(tmp_path):
     env, map_path = make_high_risk_start_env(tmp_path)
 
-    input_dim = 4 * env.grid_size * env.grid_size
+    input_dim = env.observation_size
     policy = FixedActionPolicy(input_dim, 4, fixed_action=1)
     icm = ICMModule(input_dim, 4)
     planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
@@ -278,3 +280,67 @@ def test_planner_bonus_is_not_reported_as_environment_reward(tmp_path):
     rewards, _, _, _, _, _, _, planner_usage = metrics
     assert np.isclose(rewards[0], 0.05)
     assert planner_usage == [1.0]
+
+
+def test_advisory_planner_is_consulted_in_low_risk_states(tmp_path):
+    env = GridWorldICM(grid_size=3, max_steps=1, seed=0)
+    env.cost_map = np.zeros((3, 3))
+    env.risk_map = np.zeros((3, 3))
+    env.mine_map = np.zeros((3, 3), dtype=bool)
+    env.enemy_positions = []
+    map_path = tmp_path / "low_risk_map.npz"
+    env.save_map(map_path)
+    policy = FixedActionPolicy(env.observation_size, 4, fixed_action=1)
+    icm = ICMModule(env.observation_size, 4)
+    planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
+    optimizer = optim.Adam(policy.parameters(), lr=1e-3)
+
+    metrics = train_agent(
+        env,
+        policy,
+        icm,
+        planner,
+        optimizer,
+        None,
+        use_icm=False,
+        use_planner=True,
+        num_episodes=1,
+        reset_env=False,
+        training_map_path=str(map_path),
+    )
+
+    assert metrics[-1] == [1.0]
+
+
+def test_training_horizon_curriculum_restores_evaluation_horizon(tmp_path):
+    env = GridWorldICM(grid_size=3, max_steps=5, seed=0)
+    env.cost_map = np.zeros((3, 3))
+    env.risk_map = np.zeros((3, 3))
+    env.mine_map = np.zeros((3, 3), dtype=bool)
+    env.enemy_positions = []
+    map_path = tmp_path / "curriculum_map.npz"
+    env.save_map(map_path)
+    policy = FixedActionPolicy(env.observation_size, 4, fixed_action=0)
+    icm = ICMModule(env.observation_size, 4)
+    planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
+    optimizer = optim.Adam(policy.parameters(), lr=1e-3)
+    records = []
+
+    train_agent(
+        env,
+        policy,
+        icm,
+        planner,
+        optimizer,
+        None,
+        use_icm=False,
+        use_planner=False,
+        num_episodes=3,
+        initial_training_horizon=2,
+        reset_env=False,
+        training_map_path=str(map_path),
+        episode_records=records,
+    )
+
+    assert [record["Training Horizon"] for record in records] == [2, 4, 5]
+    assert env.max_steps == 5

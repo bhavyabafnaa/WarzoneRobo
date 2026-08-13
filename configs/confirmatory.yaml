@@ -22,6 +22,11 @@ dynamic_cost: true
 add_noise: false
 random_start: true
 boundary_mines: true
+start_margin: 2
+start_mine_clearance: 1
+start_enemy_clearance: 1
+initial_training_horizon: 20
+map_seed_base: 100000
 num_seeds: 40
 variants:
   - ppo
@@ -41,6 +46,7 @@ max_constant_success: 0.10
 minimum_safe_heuristic_success: 0.10
 minimum_reward_effect: 0.5
 minimum_success_effect: 0.05
+minimum_calibration_test_success: 0.05
 primary_variant: icm_planner
 stat_test: paired
 log_backend: none

@@ -1,6 +1,8 @@
+from types import SimpleNamespace
+
 import pandas as pd
 
-from train import main
+from train import main, write_calibration_decision
 
 
 def test_validate_only_writes_map_gate_without_training(tmp_path):
@@ -54,3 +56,20 @@ def test_validate_only_writes_map_gate_without_training(tmp_path):
     assert set(safe["Split"]) == {"train", "validation", "test"}
     assert (safe["Success_Mean"] >= 0.1).all()
     assert not (output / "results" / "training_runs.csv").exists()
+
+
+def test_calibration_requires_every_variant_to_escape_floor(tmp_path):
+    runs = pd.DataFrame(
+        [
+            {"Variant": "ppo", "Test Success Mean": 0.2},
+            {"Variant": "icm_planner", "Test Success Mean": 0.0},
+        ]
+    )
+    args = SimpleNamespace(
+        results_dir=str(tmp_path),
+        minimum_calibration_test_success=0.05,
+    )
+
+    decision = write_calibration_decision(runs, args)
+
+    assert decision["calibration_passed"] is False

@@ -17,6 +17,7 @@ class SymbolicPlanner:
         cost_weight=2.0,
         risk_weight=3.0,
         revisit_penalty=1.0,
+        hazard_map=None,
     ):
         self.cost_map = cost_map
         self.risk_map = risk_map
@@ -24,12 +25,23 @@ class SymbolicPlanner:
         self.cost_weight = cost_weight
         self.risk_weight = risk_weight
         self.revisit_penalty = revisit_penalty
+        self.hazard_map = (
+            np.zeros_like(cost_map, dtype=bool)
+            if hazard_map is None
+            else np.asarray(hazard_map, dtype=bool).copy()
+        )
         self.grid_size = cost_map.shape[0]
         self.visited_map = np.zeros_like(cost_map, dtype=bool)
 
     def reset(self):
         """Clear internal visitation state."""
         self.visited_map[:] = False
+
+    def update_hazards(self, mine_map, enemy_positions):
+        """Refresh lethal cells represented in the current observation."""
+        self.hazard_map = np.asarray(mine_map, dtype=bool).copy()
+        for row, column in enemy_positions:
+            self.hazard_map[row, column] = True
 
     def get_safe_subgoal(self, agent_pos):
         x, y = agent_pos
@@ -48,6 +60,8 @@ class SymbolicPlanner:
         for action, (dx, dy) in directions.items():
             nx, ny = x + dx, y + dy
             if 0 <= nx < self.grid_size and 0 <= ny < self.grid_size:
+                if self.hazard_map[nx, ny]:
+                    continue
                 s = score_func((nx, ny))
                 if s < best_score:
                     best_score = s

@@ -19,6 +19,9 @@ class GridWorldICM:
         terminal_survival_bonus: float = 0.0,
         random_start: bool = False,
         boundary_mines: bool = False,
+        start_margin: int = 0,
+        start_mine_clearance: int = 0,
+        start_enemy_clearance: int = 0,
         seed: int | None = None,
     ) -> None:
         self.grid_size = grid_size
@@ -30,6 +33,10 @@ class GridWorldICM:
         self.terminal_survival_bonus = terminal_survival_bonus
         self.random_start = random_start
         self.boundary_mines = boundary_mines
+        self.start_margin = start_margin
+        self.start_mine_clearance = start_mine_clearance
+        self.start_enemy_clearance = start_enemy_clearance
+        self.observation_channels = 5
         if seed is None:
             seed = 0
         self.seed(seed)
@@ -87,7 +94,7 @@ class GridWorldICM:
             (row, column)
             for row in range(self.grid_size)
             for column in range(self.grid_size)
-            if not self.mine_map[row, column] and (row, column) not in enemy_cells
+            if self._is_valid_start(row, column, enemy_cells)
         ]
         if not safe_cells:
             raise ValueError("Map has no safe starting cell")
@@ -98,6 +105,36 @@ class GridWorldICM:
         if (0, 0) in safe_cells:
             return [0, 0]
         return list(safe_cells[0])
+
+    def _is_valid_start(
+        self,
+        row: int,
+        column: int,
+        enemy_cells: set[tuple[int, int]],
+    ) -> bool:
+        if self.mine_map[row, column] or (row, column) in enemy_cells:
+            return False
+        boundary_distance = min(
+            row,
+            column,
+            self.grid_size - 1 - row,
+            self.grid_size - 1 - column,
+        )
+        if boundary_distance < self.start_margin:
+            return False
+        for mine_row, mine_column in np.argwhere(self.mine_map):
+            if (
+                abs(row - int(mine_row)) + abs(column - int(mine_column))
+                <= self.start_mine_clearance
+            ):
+                return False
+        for enemy_row, enemy_column in enemy_cells:
+            if (
+                abs(row - enemy_row) + abs(column - enemy_column)
+                <= self.start_enemy_clearance
+            ):
+                return False
+        return True
 
     def load_map(self, filepath: str = "map_data.npz") -> None:
         data = np.load(filepath, allow_pickle=True)
@@ -207,7 +244,10 @@ class GridWorldICM:
         return np.clip(r, self.reward_clip[0], self.reward_clip[1])
 
     def _get_obs(self) -> np.ndarray:
-        obs = np.zeros((4, self.grid_size, self.grid_size), dtype=np.float32)
+        obs = np.zeros(
+            (self.observation_channels, self.grid_size, self.grid_size),
+            dtype=np.float32,
+        )
         obs[0, self.agent_pos[0], self.agent_pos[1]] = 1.0
         obs[1] = self.cost_map
         obs[2] = self.risk_map
@@ -219,7 +259,13 @@ class GridWorldICM:
                     obs[3, i, j] = 0.8
                 if self.mine_map[i][j]:
                     obs[3, i, j] = 1.0
+        for enemy_row, enemy_column in self.enemy_positions:
+            obs[4, enemy_row, enemy_column] = 1.0
         return obs.flatten()
+
+    @property
+    def observation_size(self) -> int:
+        return self.observation_channels * self.grid_size * self.grid_size
 
     def render(self) -> np.ndarray:
         import matplotlib
@@ -346,6 +392,7 @@ def export_benchmark_maps(
     num_train: int = 15,
     num_validation: int = 0,
     num_test: int = 5,
+    seed_base: int = 0,
     train_folder: str = "train_maps/",
     validation_folder: str | None = None,
     test_folder: str = "test_maps/",
@@ -362,6 +409,8 @@ def export_benchmark_maps(
         Number of validation maps to create. Defaults to ``0``.
     num_test : int, optional
         Number of test maps to create. Defaults to ``5``.
+    seed_base : int, optional
+        First generation seed. Use a new range for each protocol version.
     train_folder : str, optional
         Directory where training maps are saved.
     validation_folder : str, optional
@@ -372,7 +421,7 @@ def export_benchmark_maps(
 
     os.makedirs(train_folder, exist_ok=True)
     for i in range(num_train):
-        env.reset(seed=i)
+        env.reset(seed=seed_base + i)
         env.save_map(os.path.join(train_folder, f"map_{i:02d}.npz"))
 
     if num_validation:
@@ -380,12 +429,12 @@ def export_benchmark_maps(
             raise ValueError("validation_folder is required for validation maps")
         os.makedirs(validation_folder, exist_ok=True)
         for i in range(num_validation):
-            env.reset(seed=num_train + i)
+            env.reset(seed=seed_base + num_train + i)
             env.save_map(os.path.join(validation_folder, f"map_{i:02d}.npz"))
 
     os.makedirs(test_folder, exist_ok=True)
     for i in range(num_test):
-        env.reset(seed=num_train + num_validation + i)
+        env.reset(seed=seed_base + num_train + num_validation + i)
         env.save_map(os.path.join(test_folder, f"map_{i:02d}.npz"))
 
 
@@ -440,6 +489,11 @@ def evaluate_on_benchmarks(
                     ).unsqueeze(0)
                     with torch.no_grad():
                         logits, _ = policy(state_tensor)
+                        action_mask = torch.tensor(
+                            observable_action_mask(obs, env.grid_size),
+                            dtype=torch.bool,
+                        ).unsqueeze(0)
+                        logits = logits.masked_fill(~action_mask, -1e9)
                         if deterministic:
                             action = int(torch.argmax(logits, dim=-1).item())
                         else:
@@ -491,6 +545,77 @@ def evaluate_on_benchmarks(
     return (summary, records) if return_records else summary
 
 
+def _observation_safe_action(
+    observation: np.ndarray,
+    grid_size: int,
+    visit_counts: np.ndarray,
+    action_rng: np.random.Generator,
+) -> int:
+    """Choose a safe local action using only policy-visible channels."""
+    layers = np.asarray(observation).reshape(-1, grid_size, grid_size)
+    if layers.shape[0] < 5:
+        raise ValueError("Safe heuristic requires the observable enemy channel")
+    row, column = np.argwhere(layers[0] > 0.5)[0]
+    valid_actions = observable_action_mask(observation, grid_size)
+    enemy_cells = np.argwhere(layers[4] > 0.5)
+    candidates = []
+    for action, (row_delta, column_delta) in enumerate(
+        [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    ):
+        next_row = int(row + row_delta)
+        next_column = int(column + column_delta)
+        if not valid_actions[action]:
+            continue
+        enemy_proximity = 0.0
+        if len(enemy_cells):
+            nearest_enemy = min(
+                abs(next_row - int(enemy_row)) + abs(next_column - int(enemy_column))
+                for enemy_row, enemy_column in enemy_cells
+            )
+            enemy_proximity = 1.0 / max(nearest_enemy, 1)
+        score = (
+            float(layers[1, next_row, next_column])
+            + float(layers[2, next_row, next_column])
+            + 0.25 * visit_counts[next_row, next_column]
+            + enemy_proximity
+        )
+        candidates.append((score, action))
+    if not candidates:
+        return int(action_rng.integers(4))
+    best_score = min(score for score, _ in candidates)
+    best_actions = [
+        action for score, action in candidates if np.isclose(score, best_score)
+    ]
+    return int(action_rng.choice(best_actions))
+
+
+def observable_action_mask(
+    observation: np.ndarray,
+    grid_size: int,
+) -> np.ndarray:
+    """Return actions that avoid policy-visible walls, mines and enemies."""
+    layers = np.asarray(observation).reshape(-1, grid_size, grid_size)
+    if layers.shape[0] < 5:
+        raise ValueError("Action masking requires the observable enemy channel")
+    row, column = np.argwhere(layers[0] > 0.5)[0]
+    mine_map = np.isclose(layers[3], 1.0)
+    enemy_map = layers[4] > 0.5
+    mask = np.zeros(4, dtype=bool)
+    for action, (row_delta, column_delta) in enumerate(
+        [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    ):
+        next_row = int(row + row_delta)
+        next_column = int(column + column_delta)
+        if not (0 <= next_row < grid_size and 0 <= next_column < grid_size):
+            continue
+        mask[action] = not (
+            mine_map[next_row, next_column] or enemy_map[next_row, next_column]
+        )
+    if not mask.any():
+        mask[:] = True
+    return mask
+
+
 def evaluate_trivial_policies(
     env: GridWorldICM,
     map_folder: str,
@@ -518,7 +643,6 @@ def evaluate_trivial_policies(
                     seed=episode_seed,
                     load_map_path=map_path,
                 )
-                del obs
                 action_rng = np.random.default_rng(
                     900_000_000 + policy_index * 1_000_000 + episode_seed
                 )
@@ -529,52 +653,17 @@ def evaluate_trivial_policies(
                 info = {}
                 while not done:
                     if policy_name == "safe_heuristic":
-                        candidates = []
-                        row, column = env.agent_pos
-                        for action, (row_delta, column_delta) in enumerate(
-                            [(-1, 0), (1, 0), (0, -1), (0, 1)]
-                        ):
-                            next_row = row + row_delta
-                            next_column = column + column_delta
-                            if not (
-                                0 <= next_row < env.grid_size
-                                and 0 <= next_column < env.grid_size
-                            ):
-                                continue
-                            if env.mine_map[next_row, next_column]:
-                                continue
-                            if [next_row, next_column] in env.enemy_positions:
-                                continue
-                            enemy_proximity = 0.0
-                            if env.enemy_positions:
-                                nearest_enemy = min(
-                                    abs(next_row - enemy_row)
-                                    + abs(next_column - enemy_column)
-                                    for enemy_row, enemy_column in env.enemy_positions
-                                )
-                                enemy_proximity = 1.0 / max(nearest_enemy, 1)
-                            score = (
-                                float(env.cost_map[next_row, next_column])
-                                + float(env.risk_map[next_row, next_column])
-                                + 0.25 * visit_counts[next_row, next_column]
-                                + enemy_proximity
-                            )
-                            candidates.append((score, action))
-                        if candidates:
-                            best_score = min(score for score, _ in candidates)
-                            best_actions = [
-                                action
-                                for score, action in candidates
-                                if np.isclose(score, best_score)
-                            ]
-                            action = int(action_rng.choice(best_actions))
-                        else:
-                            action = int(action_rng.integers(4))
+                        action = _observation_safe_action(
+                            obs,
+                            env.grid_size,
+                            visit_counts,
+                            action_rng,
+                        )
                     elif policy_name == "random":
                         action = int(action_rng.integers(4))
                     else:
                         action = int(policy_name[-1])
-                    _, reward, done, _, info = env.step(action)
+                    obs, reward, done, _, info = env.step(action)
                     total_reward += reward
                     visit_counts[tuple(env.agent_pos)] += 1
                 survived = env.steps >= env.max_steps and not info.get("dead", False)
