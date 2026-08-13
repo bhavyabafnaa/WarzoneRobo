@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from .env import observable_action_mask, observable_hazard_map
 from .icm import ICMModule
 from .planner import SymbolicPlanner
 from .pseudocount import PseudoCountExploration
@@ -24,8 +25,10 @@ class PPOPolicy(nn.Module):
         x = F.relu(self.fc2(x))
         return self.actor(x), self.critic(x)
 
-    def act(self, x: torch.Tensor):
+    def act(self, x: torch.Tensor, action_mask: torch.Tensor | None = None):
         logits, value = self.forward(x)
+        if action_mask is not None:
+            logits = logits.masked_fill(~action_mask.bool(), -1e9)
         dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
         return action.item(), dist.log_prob(action), value
@@ -78,18 +81,19 @@ def train_agent(
     logger=None,
     initial_bonus: float = 0.5,
     final_planner_bonus: float = 0.1,
+    initial_training_horizon: int | None = None,
     reset_env: bool = True,
     training_map_path: str = "maps/map_00.npz",
     training_map_paths: list[str] | None = None,
     episode_records: list[dict] | None = None,
 ):
-    """Train PPO with optional intrinsic reward and risk-gated planning.
+    """Train PPO with optional intrinsic reward and advisory planning.
 
-    The planner is advisory: PPO always samples the executed action.  When
-    local risk is elevated, the planner recommends an action and the learning
-    reward receives a decaying bonus if the PPO action agrees with that
-    recommendation and reaches a lower-risk cell.  This preserves an on-policy
-    PPO update while still providing explicit planner guidance.
+    The planner is advisory: PPO always samples the executed action. The
+    planner recommends an action and the learning reward receives a decaying
+    bonus if the PPO action agrees with that recommendation and reaches a
+    lower-risk cell. This preserves an on-policy PPO update while still
+    providing explicit planner guidance.
 
     Environment reward is logged without intrinsic or planner shaping.  The
     latter bonuses affect only the learning return, so reward comparisons
@@ -114,6 +118,13 @@ def train_agent(
 
     initial_bonus = max(0.0, float(initial_bonus))
     final_planner_bonus = max(0.0, float(final_planner_bonus))
+    target_training_horizon = env.max_steps
+    if initial_training_horizon is None:
+        initial_training_horizon = target_training_horizon
+    initial_training_horizon = max(
+        1,
+        min(int(initial_training_horizon), target_training_horizon),
+    )
 
     if training_map_paths is None:
         os.makedirs(os.path.dirname(training_map_path) or ".", exist_ok=True)
@@ -154,6 +165,7 @@ def train_agent(
         logprob_buf = []
         value_buf = []
         reward_buf = []
+        action_mask_buf = []
         agent_path = []
         planner_consultations = 0
         ppo_decisions = 0
@@ -162,10 +174,11 @@ def train_agent(
             planner = SymbolicPlanner(
                 env.cost_map,
                 env.risk_map,
-                env.np_random,
+                np.random.default_rng(700_000_000 + episode_seed),
                 cost_weight=planner_weights.get("cost_weight", 2.0),
                 risk_weight=planner_weights.get("risk_weight", 3.0),
                 revisit_penalty=planner_weights.get("revisit_penalty", 1.0),
+                hazard_map=env.mine_map,
             )
         else:
             planner.cost_map = env.cost_map
@@ -177,6 +190,10 @@ def train_agent(
         intrinsic_log = 0.0
         visit_count = np.zeros((env.grid_size, env.grid_size))
         episode_progress = episode / max(num_episodes - 1, 1)
+        env.max_steps = round(
+            initial_training_horizon
+            + (target_training_horizon - initial_training_horizon) * episode_progress
+        )
         planner_bonus = _linear_schedule(
             initial_bonus,
             final_planner_bonus,
@@ -194,6 +211,7 @@ def train_agent(
             state = np.asarray(obs, dtype=np.float32).copy()
             state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
             risk = env.risk_map[env.agent_pos[0]][env.agent_pos[1]]
+            planner.update_hazards(observable_hazard_map(state, env.grid_size))
 
             if risk > 0.7:
                 planner.risk_weight = 5.0
@@ -208,7 +226,9 @@ def train_agent(
                 planner.cost_weight = 3.0
                 use_planner_now = use_planner
             else:
-                use_planner_now = False
+                planner.risk_weight = 1.0
+                planner.cost_weight = 3.0
+                use_planner_now = use_planner
 
             planner_action = None
             if use_planner_now:
@@ -217,7 +237,11 @@ def train_agent(
 
             # PPO remains the behavior policy in every state.  The planner
             # changes the learning reward, never the executed action.
-            action, old_logprob, value = policy.act(state_tensor)
+            action_mask = torch.tensor(
+                observable_action_mask(state, env.grid_size),
+                dtype=torch.bool,
+            ).unsqueeze(0)
+            action, old_logprob, value = policy.act(state_tensor, action_mask)
             old_logprob = old_logprob.detach().reshape(())
             ppo_decisions += 1
 
@@ -283,6 +307,7 @@ def train_agent(
             logprob_buf.append(old_logprob)
             value_buf.append(float(value.item()))
             reward_buf.append(learning_reward)
+            action_mask_buf.append(action_mask.squeeze(0))
             obs = next_obs
 
         advantages = np.asarray(
@@ -307,6 +332,8 @@ def train_agent(
         return_tensor = torch.tensor(returns, dtype=torch.float32)
 
         logits, new_values = policy(obs_tensor)
+        action_mask_tensor = torch.stack(action_mask_buf)
+        logits = logits.masked_fill(~action_mask_tensor, -1e9)
         distribution = torch.distributions.Categorical(logits=logits)
         new_logprob = distribution.log_prob(action_tensor)
 
@@ -359,7 +386,9 @@ def train_agent(
                     "PPO Decisions": ppo_decisions,
                     "Planner Consultations": planner_consultations,
                     "Planner Consultation Rate": planner_percent,
-                    "Success": success_flags[-1],
+                    "Training Horizon": env.max_steps,
+                    "Target Evaluation Horizon": target_training_horizon,
+                    "Curriculum Success": success_flags[-1],
                 }
             )
 
@@ -368,14 +397,14 @@ def train_agent(
             if hasattr(logger, "add_scalar"):
                 logger.add_scalar("reward/extrinsic", total_ext_reward, episode)
                 logger.add_scalar("reward/intrinsic", intrinsic_log, episode)
-                logger.add_scalar("success_rate", success_rate, episode)
+                logger.add_scalar("curriculum_success_rate", success_rate, episode)
                 logger.add_scalar("planner_usage", planner_percent, episode)
             elif hasattr(logger, "log"):
                 logger.log(
                     {
                         "extrinsic_reward": total_ext_reward,
                         "intrinsic_reward": intrinsic_log,
-                        "success_rate": success_rate,
+                        "curriculum_success_rate": success_rate,
                         "planner_usage": planner_percent,
                         "episode": episode,
                     }
@@ -387,9 +416,10 @@ def train_agent(
             f"Steps: {step_count} | "
             f"PPO: {ppo_decisions} | "
             f"Planner consulted: {planner_consultations} | "
-            f"Success: {success_rate * 100:.1f}%"
+            f"Curriculum success: {success_rate * 100:.1f}%"
         )
 
+    env.max_steps = target_training_horizon
     return (
         reward_log,
         intrinsic_rewards,

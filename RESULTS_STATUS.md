@@ -35,19 +35,48 @@ improve, and all greedy policies selected the same constant action. Therefore
 the corrected run supports neither hybrid superiority nor a useful generalized
 policy.
 
+## Failed protocol-v1 calibration
+
+The first pure-survival calibration was stopped after 22,000 episodes covering
+44 completed variant-runs across seeds 0–7. It produced zero successful
+100-step episodes. Median lifetime was three steps, 73–76% of episodes ended
+within five steps, and the longest episode reached only 43 steps.
+
+The audit found that the policy observation omitted enemy positions while the
+solvability heuristic accessed them directly. Starts were also frequently one
+cell from the lethal boundary, and planner variants received no recommendation
+in roughly 72% of episodes. Protocol v1 is therefore a failed calibration run,
+not comparative evidence.
+
+## Protocol-v2 calibration
+
+Protocol v2 makes enemies observable, enforces start clearance, restricts the
+solvability heuristic to policy-visible information, applies a common
+observation-derived safety mask on-policy, consults the advisory planner from
+the first step, isolates planner randomness from environment randomness, and
+introduces a 20-to-100-step survival curriculum. Training telemetry labels
+curriculum completion separately from full-horizon evaluation survival.
+
+A two-seed, six-variant calibration with 150 training episodes per run passed:
+all variants achieved nonzero full-horizon stochastic test survival, ranging
+from 0.22 to 0.40 when averaged across seeds. Overall training lifetime rose
+from roughly four steps in v1 to 34–37 steps. These are calibration diagnostics
+only and do not support a superiority claim.
+
 ## Confirmatory regeneration
 
 The next experiment is declared in `configs/confirmatory.yaml`:
 
 ```bash
 python train.py --config configs/confirmatory.yaml --validate-only
+python train.py --config configs/calibration_v2.yaml
 python train.py --config configs/confirmatory.yaml
 ```
 
-It retains pure survival as the task and introduces random safe starts, 30/10/30
-disjoint train/validation/test maps, 40 matched training seeds, 500 episodes,
-and 20 matched stochastic rollouts per held-out map. Greedy rollouts are
-secondary diagnostics.
+It retains pure survival as the task and uses fresh 30/10/30 disjoint
+train/validation/test maps, 40 matched training seeds, 500 episodes, and 20
+matched stochastic rollouts per held-out map. Greedy rollouts are secondary
+diagnostics.
 
 The primary outcome is stochastic held-out survival rate. The declared hybrid
 must exceed every other variant by at least 0.05 absolute survival probability,

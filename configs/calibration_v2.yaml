@@ -1,0 +1,52 @@
+grid_size: 8
+num_episodes: 150
+max_steps: 100
+survival_reward: 0.5
+terminal_survival_bonus: 5.0
+cost_weight: 3.0
+risk_weight: 3.0
+revisit_penalty: 2.0
+learning_rate: 0.0003
+intrinsic_learning_rate: 0.001
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+entropy_coef: 0.01
+value_coef: 0.5
+initial_beta: 0.1
+final_beta: 0.05
+initial_planner_bonus: 0.5
+final_planner_bonus: 0.1
+dynamic_risk: true
+dynamic_cost: true
+add_noise: false
+random_start: true
+boundary_mines: true
+start_margin: 2
+start_mine_clearance: 1
+start_enemy_clearance: 1
+initial_training_horizon: 20
+map_seed_base: 50000
+num_seeds: 2
+variants:
+  - ppo
+  - icm
+  - rnd
+  - pc
+  - planner
+  - icm_planner
+num_train_maps: 10
+num_validation_maps: 5
+num_benchmark_maps: 5
+evaluation_seed: 30000
+evaluation_rollouts: 5
+greedy_evaluation_rollouts: 5
+trivial_policy_rollouts: 5
+max_constant_success: 0.10
+minimum_safe_heuristic_success: 0.10
+minimum_reward_effect: 0.5
+minimum_success_effect: 0.05
+minimum_calibration_test_success: 0.05
+primary_variant: icm_planner
+stat_test: paired
+log_backend: none

@@ -88,9 +88,14 @@ The definitive experiment matrix is:
 | `planner` | PPO + Planner |
 | `icm_planner` | PPO + ICM + Planner |
 
-The confirmatory configuration uses 30 training, 10 validation, and 30 test
-maps with disjoint generation seeds. Every run rotates deterministically across
-all training maps. Variants with the same run seed receive matched maps,
+Pure-survival protocol v1 was rejected during calibration after all six
+variants produced zero full-horizon survival across 22,000 training episodes.
+Protocol v2 fixes the resulting observability and unsafe-action floor before
+any confirmatory outcomes are collected.
+
+The v2 confirmatory configuration uses 30 training, 10 validation, and 30 test
+maps from a fresh generation-seed range. Every run rotates deterministically
+across all training maps. Variants with the same run seed receive matched maps,
 environment randomness, evaluation starts, and action-sampling seeds.
 
 ### Confirmatory pure-survival protocol
@@ -99,7 +104,12 @@ environment randomness, evaluation starts, and action-sampling seeds.
 inspected:
 
 * six variants, 40 matched training seeds, and 500 episodes per run;
-* random safe starts and boundary hazards to prevent constant-action success;
+* random starts with boundary, mine, and enemy clearance;
+* policy-visible enemy locations and a common observation-derived safety mask
+  that prevents every variant from intentionally entering a visible lethal
+  cell;
+* a survival curriculum that increases the training horizon from 20 to 100
+  steps while evaluation always uses the full 100-step horizon;
 * 20 stochastic rollouts per held-out map as the primary evaluation, with
   greedy evaluation reported secondarily;
 * held-out survival rate as the primary outcome, defined as reaching
@@ -110,10 +120,21 @@ inspected:
   comparison, in addition to corrected statistical significance.
 
 Before training, an automatic validity gate evaluates four constant-action
-policies, a random policy, and a safe non-learning heuristic on every split.
+policies, raw and safety-masked random policies, four masked fixed-preference
+policies, and a safe non-learning heuristic on every split. The masked controls
+and heuristic are restricted to the same observation channels available to
+PPO, making the contribution of the common safety shield auditable.
 Constant-action survival must remain at or below 0.10 and safe-heuristic
 survival must be at least 0.10. This rejects both degenerate and demonstrably
 unsolvable map sets.
+
+Before the 40-seed run, execute `configs/calibration_v2.yaml`. Every variant
+must achieve at least 0.05 stochastic held-out survival or the run exits with a
+failed calibration decision:
+
+```bash
+python train.py --config configs/calibration_v2.yaml
+```
 
 Validate only the maps and protocol with:
 
@@ -142,7 +163,13 @@ separately:
 * `results/confirmatory_tests.csv`
 * `results/interaction_tests.csv`
 * `results/confirmatory_decision.yaml`
+* `results/calibration_decision.yaml`
 * `results/protocol_manifest.yaml`
+
+Training CSVs label curriculum-horizon completion as `Curriculum Success` and
+record both the current `Training Horizon` and fixed
+`Target Evaluation Horizon`. Only validation/test `Success` is full 100-step
+survival and eligible for the primary claim.
 
 ```bash
 python train.py --config configs/confirmatory.yaml
@@ -158,7 +185,8 @@ paired, Holm-corrected pure-survival tests in `confirmatory_tests.csv`.
 * **PPO** – The main reinforcement learning algorithm used to learn policies from environment interaction.
 * **ICM** – Adds intrinsic rewards based on prediction error of the agent's dynamics model to promote exploring unseen states.
 * **RND** – Provides exploration bonuses by comparing a fixed random network with a trained predictor network.
-* **Planner** – A one-step heuristic scores valid neighboring cells as `cost_weight * cost + risk_weight * risk + revisit_penalty`. PPO always executes its own sampled action; when local risk is elevated, agreement with the planner's recommendation earns a decaying learning bonus.
+* **Planner** – A one-step heuristic scores safe neighboring cells as `cost_weight * cost + risk_weight * risk + revisit_penalty`. PPO always executes its own sampled action; agreement with the advisory recommendation earns a decaying learning bonus.
+* **Safety mask** – Every variant uses the same mask derived from the policy observation to exclude out-of-bounds moves and currently visible mines or enemies. The same mask is applied during action sampling and PPO updates.
 * Planner and intrinsic bonuses affect learning returns but are excluded from the reported environment reward.
 
 The demo notebook experiments with different combinations of these components to evaluate their effect on success rate and exploration.

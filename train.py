@@ -98,6 +98,11 @@ def parse_args(argv=None):
     parser.add_argument("--add_noise", action="store_true")
     parser.add_argument("--random_start", action="store_true")
     parser.add_argument("--boundary_mines", action="store_true")
+    parser.add_argument("--start_margin", type=int, default=0)
+    parser.add_argument("--start_mine_clearance", type=int, default=0)
+    parser.add_argument("--start_enemy_clearance", type=int, default=0)
+    parser.add_argument("--initial_training_horizon", type=int, default=None)
+    parser.add_argument("--map_seed_base", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--seeds",
@@ -129,6 +134,7 @@ def parse_args(argv=None):
     parser.add_argument("--minimum_safe_heuristic_success", type=float, default=0.0)
     parser.add_argument("--minimum_reward_effect", type=float, default=0.0)
     parser.add_argument("--minimum_success_effect", type=float, default=0.0)
+    parser.add_argument("--minimum_calibration_test_success", type=float, default=0.0)
     parser.add_argument(
         "--primary_variant",
         choices=list(VARIANTS),
@@ -214,6 +220,9 @@ def build_environment(args, seed: int) -> GridWorldICM:
         terminal_survival_bonus=args.terminal_survival_bonus,
         random_start=args.random_start,
         boundary_mines=args.boundary_mines,
+        start_margin=args.start_margin,
+        start_mine_clearance=args.start_mine_clearance,
+        start_enemy_clearance=args.start_enemy_clearance,
         seed=seed,
     )
 
@@ -222,7 +231,7 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
     spec = VARIANTS[variant_key]
     set_seed(run_seed)
     env = build_environment(args, run_seed)
-    input_dim = 4 * args.grid_size * args.grid_size
+    input_dim = env.observation_size
     action_dim = 4
 
     # The policy initialization is identical across variants for each seed.
@@ -259,7 +268,7 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
     planner = SymbolicPlanner(
         env.cost_map,
         env.risk_map,
-        env.np_random,
+        np.random.default_rng(800_000_000 + run_seed),
         cost_weight=args.cost_weight,
         risk_weight=args.risk_weight,
         revisit_penalty=args.revisit_penalty,
@@ -301,6 +310,7 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
         logger=logger,
         initial_bonus=args.initial_planner_bonus,
         final_planner_bonus=args.final_planner_bonus,
+        initial_training_horizon=args.initial_training_horizon,
         reset_env=False,
         training_map_paths=training_maps,
         episode_records=episode_records,
@@ -417,11 +427,12 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
         "Variant": variant_key,
         "Model": spec["label"],
         "Training Maps": args.num_train_maps,
+        "Target Evaluation Horizon": args.max_steps,
         "Train Reward Mean": float(np.mean(rewards)),
         "Train Reward Episode Std": sample_std(rewards),
         "Final Reward Mean": float(np.mean(rewards[-final_window:])),
-        "Success Mean": float(np.mean(success)),
-        "Final Success Mean": float(np.mean(success[-final_window:])),
+        "Curriculum Success Mean": float(np.mean(success)),
+        "Final Curriculum Success Mean": float(np.mean(success[-final_window:])),
         "Planner Consultation %": float(np.mean(planner_usage)) * 100,
         "Intrinsic Spikes": count_intrinsic_spikes(intrinsic),
         "Validation Reward Mean": validation_reward,
@@ -548,8 +559,12 @@ def summarize_runs(
                 {
                     "Final Reward Mean": (float(group["Final Reward Mean"].mean())),
                     "Final Reward Std": sample_std(group["Final Reward Mean"]),
-                    "Final Success Mean": (float(group["Final Success Mean"].mean())),
-                    "Final Success Std": sample_std(group["Final Success Mean"]),
+                    "Final Curriculum Success Mean": float(
+                        group["Final Curriculum Success Mean"].mean()
+                    ),
+                    "Final Curriculum Success Std": sample_std(
+                        group["Final Curriculum Success Mean"]
+                    ),
                     "Planner Consultation %": float(
                         group["Planner Consultation %"].mean()
                     ),
@@ -563,7 +578,7 @@ def summarize_runs(
 
 def write_protocol_manifest(args, seeds: list[int]) -> None:
     manifest = {
-        "protocol": "confirmatory-pure-survival-v1",
+        "protocol": "confirmatory-pure-survival-v2",
         "python": sys.version.split()[0],
         "seeds": seeds,
         "declared_primary_comparison": (
@@ -702,6 +717,70 @@ def write_run_view(
     )
 
 
+def write_calibration_decision(runs: pd.DataFrame, args) -> dict:
+    """Record whether every variant escaped the pure-survival floor."""
+    success_by_variant = (
+        runs.groupby("Variant")["Test Success Mean"].mean().sort_index()
+    )
+    expected_variants = set(args.variants)
+    observed_variants = set(success_by_variant.index)
+    missing_variants = sorted(expected_variants - observed_variants)
+    threshold = args.minimum_calibration_test_success
+    decision = {
+        "calibration_passed": bool(
+            not missing_variants and (success_by_variant >= threshold).all()
+        ),
+        "criterion": (
+            "every selected variant meets the minimum held-out survival threshold"
+        ),
+        "expected_variants": sorted(expected_variants),
+        "missing_variants": missing_variants,
+        "minimum_test_success": threshold,
+        "test_success_by_variant": {
+            variant: float(success) for variant, success in success_by_variant.items()
+        },
+    }
+    with open(
+        os.path.join(args.results_dir, "calibration_decision.yaml"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        yaml.safe_dump(decision, handle, sort_keys=True)
+    return decision
+
+
+def write_confirmatory_decision(
+    success_tests: pd.DataFrame,
+    args,
+    comparators: list[str],
+) -> dict:
+    """Write the preregistered all-comparator hybrid decision."""
+    tested_comparators = set(success_tests.get("Comparator", []))
+    missing_comparators = sorted(set(comparators) - tested_comparators)
+    decision = {
+        "primary_claim_supported": bool(
+            not success_tests.empty
+            and not missing_comparators
+            and success_tests["Superiority Criterion Met"].all()
+        ),
+        "hybrid": args.primary_variant,
+        "primary_metric": "Test Success Mean",
+        "secondary_metric": "Test Reward Mean",
+        "required_comparators": comparators,
+        "missing_comparators": missing_comparators,
+        "minimum_mean_success_effect": args.minimum_success_effect,
+        "secondary_minimum_mean_reward_effect": args.minimum_reward_effect,
+        "holm_family_size": len(comparators),
+    }
+    with open(
+        os.path.join(args.results_dir, "confirmatory_decision.yaml"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        yaml.safe_dump(decision, handle, sort_keys=True)
+    return decision
+
+
 def main(argv=None):
     args = parse_args(argv)
     seeds = resolve_seeds(args)
@@ -720,6 +799,16 @@ def main(argv=None):
         raise ValueError("--max_constant_success must be between 0 and 1")
     if not 0 <= args.minimum_safe_heuristic_success <= 1:
         raise ValueError("--minimum_safe_heuristic_success must be between 0 and 1")
+    if not 0 <= args.minimum_calibration_test_success <= 1:
+        raise ValueError("--minimum_calibration_test_success must be between 0 and 1")
+    clearance_arguments = {
+        "--start_margin": args.start_margin,
+        "--start_mine_clearance": args.start_mine_clearance,
+        "--start_enemy_clearance": args.start_enemy_clearance,
+    }
+    for argument, value in clearance_arguments.items():
+        if value < 0:
+            raise ValueError(f"{argument} must be non-negative")
     if args.primary_variant not in args.variants:
         raise ValueError("--primary_variant must be included in --variants")
 
@@ -742,6 +831,7 @@ def main(argv=None):
         num_train=args.num_train_maps,
         num_validation=args.num_validation_maps,
         num_test=args.num_benchmark_maps,
+        seed_base=args.map_seed_base,
         train_folder=args.train_map_dir,
         validation_folder=args.validation_map_dir,
         test_folder=args.benchmark_map_dir,
@@ -793,7 +883,7 @@ def main(argv=None):
             summarize_runs(
                 runs,
                 reward_metric="Train Reward Mean",
-                success_metric="Success Mean",
+                success_metric="Curriculum Success Mean",
                 stat_test=args.stat_test,
                 prefix="Train",
                 include_training_details=True,
@@ -869,24 +959,13 @@ def main(argv=None):
         os.path.join(args.results_dir, "interaction_tests.csv"),
         index=False,
     )
-    decision = {
-        "primary_claim_supported": bool(
-            not success_tests.empty and success_tests["Superiority Criterion Met"].all()
-        ),
-        "hybrid": args.primary_variant,
-        "primary_metric": "Test Success Mean",
-        "secondary_metric": "Test Reward Mean",
-        "required_comparators": comparators,
-        "minimum_mean_success_effect": args.minimum_success_effect,
-        "secondary_minimum_mean_reward_effect": args.minimum_reward_effect,
-        "holm_family_size": len(comparators),
-    }
-    with open(
-        os.path.join(args.results_dir, "confirmatory_decision.yaml"),
-        "w",
-        encoding="utf-8",
-    ) as handle:
-        yaml.safe_dump(decision, handle, sort_keys=True)
+    write_confirmatory_decision(success_tests, args, comparators)
+
+    calibration = write_calibration_decision(runs, args)
+    if not calibration["calibration_passed"]:
+        raise RuntimeError(
+            "Calibration failed; at least one variant remains at the survival floor"
+        )
 
     if args.plot_dir:
         for variant_key, logs in curve_logs.items():
