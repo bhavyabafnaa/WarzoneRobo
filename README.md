@@ -120,8 +120,10 @@ inspected:
   comparison, in addition to corrected statistical significance.
 
 Before training, an automatic validity gate evaluates four constant-action
-policies, a random policy, and a safe non-learning heuristic on every split.
-The heuristic is restricted to the same observation channels available to PPO.
+policies, raw and safety-masked random policies, four masked fixed-preference
+policies, and a safe non-learning heuristic on every split. The masked controls
+and heuristic are restricted to the same observation channels available to
+PPO, making the contribution of the common safety shield auditable.
 Constant-action survival must remain at or below 0.10 and safe-heuristic
 survival must be at least 0.10. This rejects both degenerate and demonstrably
 unsolvable map sets.
@@ -163,6 +165,11 @@ separately:
 * `results/confirmatory_decision.yaml`
 * `results/calibration_decision.yaml`
 * `results/protocol_manifest.yaml`
+
+Training CSVs label curriculum-horizon completion as `Curriculum Success` and
+record both the current `Training Horizon` and fixed
+`Target Evaluation Horizon`. Only validation/test `Success` is full 100-step
+survival and eligible for the primary claim.
 
 ```bash
 python train.py --config configs/confirmatory.yaml

@@ -343,4 +343,47 @@ def test_training_horizon_curriculum_restores_evaluation_horizon(tmp_path):
     )
 
     assert [record["Training Horizon"] for record in records] == [2, 4, 5]
+    assert [record["Target Evaluation Horizon"] for record in records] == [5, 5, 5]
+    assert "Curriculum Success" in records[0]
+    assert "Success" not in records[0]
     assert env.max_steps == 5
+
+
+def test_planner_cannot_change_matched_environment_randomness(tmp_path):
+    map_env = GridWorldICM(grid_size=3, max_steps=5, seed=0)
+    map_env.cost_map = np.zeros((3, 3))
+    map_env.risk_map = np.zeros((3, 3))
+    map_env.terrain_map = np.full((3, 3), "normal")
+    map_env.mine_map = np.zeros((3, 3), dtype=bool)
+    map_env.mine_map[0, 1] = True
+    map_env.mine_map[1, 0] = True
+    map_env.enemy_positions = [[2, 2]]
+    map_path = tmp_path / "planner_rng_map.npz"
+    map_env.save_map(map_path)
+
+    def run(use_planner):
+        env = GridWorldICM(grid_size=3, max_steps=5, seed=0)
+        torch.manual_seed(10)
+        policy = FixedActionPolicy(env.observation_size, 4, fixed_action=0)
+        icm = ICMModule(env.observation_size, 4)
+        planner = SymbolicPlanner(env.cost_map, env.risk_map, env.np_random)
+        optimizer = optim.Adam(policy.parameters(), lr=1e-3)
+        records = []
+        train_agent(
+            env,
+            policy,
+            icm,
+            planner,
+            optimizer,
+            None,
+            use_icm=False,
+            use_planner=use_planner,
+            num_episodes=3,
+            seed=9,
+            reset_env=False,
+            training_map_path=str(map_path),
+            episode_records=records,
+        )
+        return [(record["Environment Reward"], record["Steps"]) for record in records]
+
+    assert run(use_planner=False) == run(use_planner=True)

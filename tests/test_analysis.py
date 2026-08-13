@@ -51,3 +51,39 @@ def test_factorial_interaction_detects_positive_synergy():
 
     assert result["ICM x Planner Interaction"] == 1.0
     assert bool(result["Positive Synergy"]) is True
+
+
+def test_hybrid_comparison_is_seed_paired_and_holm_corrected_against_all_five():
+    comparators = ["ppo", "icm", "rnd", "pc", "planner"]
+    rows = []
+    for seed in range(8):
+        rows.append(
+            {
+                "Seed": seed,
+                "Variant": "icm_planner",
+                "Test Success Mean": 0.8 + seed * 0.001,
+            }
+        )
+        for index, comparator in enumerate(comparators):
+            rows.append(
+                {
+                    "Seed": seed,
+                    "Variant": comparator,
+                    "Test Success Mean": 0.5 - index * 0.01 + seed * 0.001,
+                }
+            )
+    # An unmatched comparator seed must not enter a paired comparison.
+    rows.append({"Seed": 999, "Variant": "ppo", "Test Success Mean": 1.0})
+
+    result = confirmatory_comparisons(
+        pd.DataFrame(rows),
+        metrics=["Test Success Mean"],
+        hybrid="icm_planner",
+        comparators=comparators,
+        minimum_effect=0.05,
+    )
+
+    assert set(result["Comparator"]) == set(comparators)
+    assert (result["N"] == 8).all()
+    assert result["Holm-adjusted p-value"].notna().all()
+    assert result["Superiority Criterion Met"].all()

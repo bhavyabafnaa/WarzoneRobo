@@ -53,7 +53,9 @@ not comparative evidence.
 Protocol v2 makes enemies observable, enforces start clearance, restricts the
 solvability heuristic to policy-visible information, applies a common
 observation-derived safety mask on-policy, consults the advisory planner from
-the first step, and introduces a 20-to-100-step survival curriculum.
+the first step, isolates planner randomness from environment randomness, and
+introduces a 20-to-100-step survival curriculum. Training telemetry labels
+curriculum completion separately from full-horizon evaluation survival.
 
 A two-seed, six-variant calibration with 150 training episodes per run passed:
 all variants achieved nonzero full-horizon stochastic test survival, ranging

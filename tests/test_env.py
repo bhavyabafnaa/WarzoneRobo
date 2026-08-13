@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 from src.env import (
     GridWorldICM,
@@ -180,6 +181,36 @@ def test_action_mask_excludes_observable_lethal_cells():
     assert mask.tolist() == [False, False, True, True]
 
 
+def test_benchmark_policy_cannot_select_a_visible_lethal_action(tmp_path):
+    map_folder = tmp_path / "masked_test_maps"
+    map_folder.mkdir()
+    env = GridWorldICM(grid_size=3, max_steps=1, seed=0)
+    env.cost_map = np.zeros((3, 3))
+    env.risk_map = np.zeros((3, 3))
+    env.terrain_map = np.full((3, 3), "normal")
+    env.mine_map = np.zeros((3, 3), dtype=bool)
+    env.mine_map[0, 1] = True
+    env.enemy_positions = []
+    env.save_map(map_folder / "map_00.npz")
+    policy = PPOPolicy(env.observation_size, 4)
+    with torch.no_grad():
+        for parameter in policy.parameters():
+            parameter.zero_()
+        policy.actor.bias[3] = 100.0  # right is a visible mine
+        policy.actor.bias[1] = 1.0  # down is the only valid move
+
+    result = evaluate_on_benchmarks(
+        env,
+        policy,
+        str(map_folder),
+        num_maps=1,
+        deterministic=True,
+        return_success=True,
+    )
+
+    assert result[2] == 1.0
+
+
 def test_survival_bonus_aligns_reward_with_survival():
     env = GridWorldICM(
         grid_size=3,
@@ -263,3 +294,10 @@ def test_boundary_hazards_defeat_constant_action_policies(tmp_path):
 
     assert len(constant_records) == 12
     assert all(record["Success"] == 0 for record in constant_records)
+    assert {record["Policy"] for record in records} >= {
+        "masked_random",
+        "masked_constant_0",
+        "masked_constant_1",
+        "masked_constant_2",
+        "masked_constant_3",
+    }

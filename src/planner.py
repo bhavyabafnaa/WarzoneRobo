@@ -37,11 +37,9 @@ class SymbolicPlanner:
         """Clear internal visitation state."""
         self.visited_map[:] = False
 
-    def update_hazards(self, mine_map, enemy_positions):
-        """Refresh lethal cells represented in the current observation."""
-        self.hazard_map = np.asarray(mine_map, dtype=bool).copy()
-        for row, column in enemy_positions:
-            self.hazard_map[row, column] = True
+    def update_hazards(self, hazard_map):
+        """Refresh lethal cells extracted from the current observation."""
+        self.hazard_map = np.asarray(hazard_map, dtype=bool).copy()
 
     def get_safe_subgoal(self, agent_pos):
         x, y = agent_pos

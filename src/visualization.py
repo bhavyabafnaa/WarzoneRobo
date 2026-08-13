@@ -7,6 +7,8 @@ import pandas as pd
 import seaborn as sns
 import torch
 
+from .env import observable_action_mask
+
 
 def _stack_logs(logs: list[list[float]] | None, name: str) -> pd.DataFrame:
     """Convert a list of episode logs into a long-form DataFrame."""
@@ -178,7 +180,11 @@ def render_episode_video(
     step = 0
     while not done and step < max_steps:
         state_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
-        action, _, _ = policy.act(state_tensor)
+        action_mask = torch.tensor(
+            observable_action_mask(obs, env.grid_size),
+            dtype=torch.bool,
+        ).unsqueeze(0)
+        action, _, _ = policy.act(state_tensor, action_mask)
         obs, _, done, _, _ = env.step(action)
         frames.append(env.render())
         step += 1

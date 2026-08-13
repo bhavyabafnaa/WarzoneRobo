@@ -268,7 +268,7 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
     planner = SymbolicPlanner(
         env.cost_map,
         env.risk_map,
-        env.np_random,
+        np.random.default_rng(800_000_000 + run_seed),
         cost_weight=args.cost_weight,
         risk_weight=args.risk_weight,
         revisit_penalty=args.revisit_penalty,
@@ -427,11 +427,12 @@ def run_variant(args, variant_key: str, run_seed: int, logger=None):
         "Variant": variant_key,
         "Model": spec["label"],
         "Training Maps": args.num_train_maps,
+        "Target Evaluation Horizon": args.max_steps,
         "Train Reward Mean": float(np.mean(rewards)),
         "Train Reward Episode Std": sample_std(rewards),
         "Final Reward Mean": float(np.mean(rewards[-final_window:])),
-        "Success Mean": float(np.mean(success)),
-        "Final Success Mean": float(np.mean(success[-final_window:])),
+        "Curriculum Success Mean": float(np.mean(success)),
+        "Final Curriculum Success Mean": float(np.mean(success[-final_window:])),
         "Planner Consultation %": float(np.mean(planner_usage)) * 100,
         "Intrinsic Spikes": count_intrinsic_spikes(intrinsic),
         "Validation Reward Mean": validation_reward,
@@ -558,8 +559,12 @@ def summarize_runs(
                 {
                     "Final Reward Mean": (float(group["Final Reward Mean"].mean())),
                     "Final Reward Std": sample_std(group["Final Reward Mean"]),
-                    "Final Success Mean": (float(group["Final Success Mean"].mean())),
-                    "Final Success Std": sample_std(group["Final Success Mean"]),
+                    "Final Curriculum Success Mean": float(
+                        group["Final Curriculum Success Mean"].mean()
+                    ),
+                    "Final Curriculum Success Std": sample_std(
+                        group["Final Curriculum Success Mean"]
+                    ),
                     "Planner Consultation %": float(
                         group["Planner Consultation %"].mean()
                     ),
@@ -717,12 +722,19 @@ def write_calibration_decision(runs: pd.DataFrame, args) -> dict:
     success_by_variant = (
         runs.groupby("Variant")["Test Success Mean"].mean().sort_index()
     )
+    expected_variants = set(args.variants)
+    observed_variants = set(success_by_variant.index)
+    missing_variants = sorted(expected_variants - observed_variants)
     threshold = args.minimum_calibration_test_success
     decision = {
-        "calibration_passed": bool((success_by_variant >= threshold).all()),
+        "calibration_passed": bool(
+            not missing_variants and (success_by_variant >= threshold).all()
+        ),
         "criterion": (
             "every selected variant meets the minimum held-out survival threshold"
         ),
+        "expected_variants": sorted(expected_variants),
+        "missing_variants": missing_variants,
         "minimum_test_success": threshold,
         "test_success_by_variant": {
             variant: float(success) for variant, success in success_by_variant.items()
@@ -730,6 +742,38 @@ def write_calibration_decision(runs: pd.DataFrame, args) -> dict:
     }
     with open(
         os.path.join(args.results_dir, "calibration_decision.yaml"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        yaml.safe_dump(decision, handle, sort_keys=True)
+    return decision
+
+
+def write_confirmatory_decision(
+    success_tests: pd.DataFrame,
+    args,
+    comparators: list[str],
+) -> dict:
+    """Write the preregistered all-comparator hybrid decision."""
+    tested_comparators = set(success_tests.get("Comparator", []))
+    missing_comparators = sorted(set(comparators) - tested_comparators)
+    decision = {
+        "primary_claim_supported": bool(
+            not success_tests.empty
+            and not missing_comparators
+            and success_tests["Superiority Criterion Met"].all()
+        ),
+        "hybrid": args.primary_variant,
+        "primary_metric": "Test Success Mean",
+        "secondary_metric": "Test Reward Mean",
+        "required_comparators": comparators,
+        "missing_comparators": missing_comparators,
+        "minimum_mean_success_effect": args.minimum_success_effect,
+        "secondary_minimum_mean_reward_effect": args.minimum_reward_effect,
+        "holm_family_size": len(comparators),
+    }
+    with open(
+        os.path.join(args.results_dir, "confirmatory_decision.yaml"),
         "w",
         encoding="utf-8",
     ) as handle:
@@ -839,7 +883,7 @@ def main(argv=None):
             summarize_runs(
                 runs,
                 reward_metric="Train Reward Mean",
-                success_metric="Success Mean",
+                success_metric="Curriculum Success Mean",
                 stat_test=args.stat_test,
                 prefix="Train",
                 include_training_details=True,
@@ -915,24 +959,7 @@ def main(argv=None):
         os.path.join(args.results_dir, "interaction_tests.csv"),
         index=False,
     )
-    decision = {
-        "primary_claim_supported": bool(
-            not success_tests.empty and success_tests["Superiority Criterion Met"].all()
-        ),
-        "hybrid": args.primary_variant,
-        "primary_metric": "Test Success Mean",
-        "secondary_metric": "Test Reward Mean",
-        "required_comparators": comparators,
-        "minimum_mean_success_effect": args.minimum_success_effect,
-        "secondary_minimum_mean_reward_effect": args.minimum_reward_effect,
-        "holm_family_size": len(comparators),
-    }
-    with open(
-        os.path.join(args.results_dir, "confirmatory_decision.yaml"),
-        "w",
-        encoding="utf-8",
-    ) as handle:
-        yaml.safe_dump(decision, handle, sort_keys=True)
+    write_confirmatory_decision(success_tests, args, comparators)
 
     calibration = write_calibration_decision(runs, args)
     if not calibration["calibration_passed"]:

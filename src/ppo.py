@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .env import observable_action_mask
+from .env import observable_action_mask, observable_hazard_map
 from .icm import ICMModule
 from .planner import SymbolicPlanner
 from .pseudocount import PseudoCountExploration
@@ -174,7 +174,7 @@ def train_agent(
             planner = SymbolicPlanner(
                 env.cost_map,
                 env.risk_map,
-                env.np_random,
+                np.random.default_rng(700_000_000 + episode_seed),
                 cost_weight=planner_weights.get("cost_weight", 2.0),
                 risk_weight=planner_weights.get("risk_weight", 3.0),
                 revisit_penalty=planner_weights.get("revisit_penalty", 1.0),
@@ -211,7 +211,7 @@ def train_agent(
             state = np.asarray(obs, dtype=np.float32).copy()
             state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
             risk = env.risk_map[env.agent_pos[0]][env.agent_pos[1]]
-            planner.update_hazards(env.mine_map, env.enemy_positions)
+            planner.update_hazards(observable_hazard_map(state, env.grid_size))
 
             if risk > 0.7:
                 planner.risk_weight = 5.0
@@ -387,7 +387,8 @@ def train_agent(
                     "Planner Consultations": planner_consultations,
                     "Planner Consultation Rate": planner_percent,
                     "Training Horizon": env.max_steps,
-                    "Success": success_flags[-1],
+                    "Target Evaluation Horizon": target_training_horizon,
+                    "Curriculum Success": success_flags[-1],
                 }
             )
 
@@ -396,14 +397,14 @@ def train_agent(
             if hasattr(logger, "add_scalar"):
                 logger.add_scalar("reward/extrinsic", total_ext_reward, episode)
                 logger.add_scalar("reward/intrinsic", intrinsic_log, episode)
-                logger.add_scalar("success_rate", success_rate, episode)
+                logger.add_scalar("curriculum_success_rate", success_rate, episode)
                 logger.add_scalar("planner_usage", planner_percent, episode)
             elif hasattr(logger, "log"):
                 logger.log(
                     {
                         "extrinsic_reward": total_ext_reward,
                         "intrinsic_reward": intrinsic_log,
-                        "success_rate": success_rate,
+                        "curriculum_success_rate": success_rate,
                         "planner_usage": planner_percent,
                         "episode": episode,
                     }
@@ -415,7 +416,7 @@ def train_agent(
             f"Steps: {step_count} | "
             f"PPO: {ppo_decisions} | "
             f"Planner consulted: {planner_consultations} | "
-            f"Success: {success_rate * 100:.1f}%"
+            f"Curriculum success: {success_rate * 100:.1f}%"
         )
 
     env.max_steps = target_training_horizon

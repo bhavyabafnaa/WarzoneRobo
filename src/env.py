@@ -354,7 +354,11 @@ def visualize_paths_on_benchmark_maps(
         done = False
         while not done:
             state_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
-            action, _, _ = policy.act(state_tensor)
+            action_mask = torch.tensor(
+                observable_action_mask(obs, env.grid_size),
+                dtype=torch.bool,
+            ).unsqueeze(0)
+            action, _, _ = policy.act(state_tensor, action_mask)
             obs, reward, done, _, _ = env.step(action)
             path.append(tuple(env.agent_pos))
             rewards.append(reward)
@@ -598,8 +602,7 @@ def observable_action_mask(
     if layers.shape[0] < 5:
         raise ValueError("Action masking requires the observable enemy channel")
     row, column = np.argwhere(layers[0] > 0.5)[0]
-    mine_map = np.isclose(layers[3], 1.0)
-    enemy_map = layers[4] > 0.5
+    hazard_map = observable_hazard_map(observation, grid_size)
     mask = np.zeros(4, dtype=bool)
     for action, (row_delta, column_delta) in enumerate(
         [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -608,12 +611,21 @@ def observable_action_mask(
         next_column = int(column + column_delta)
         if not (0 <= next_row < grid_size and 0 <= next_column < grid_size):
             continue
-        mask[action] = not (
-            mine_map[next_row, next_column] or enemy_map[next_row, next_column]
-        )
+        mask[action] = not hazard_map[next_row, next_column]
     if not mask.any():
         mask[:] = True
     return mask
+
+
+def observable_hazard_map(
+    observation: np.ndarray,
+    grid_size: int,
+) -> np.ndarray:
+    """Extract exactly the lethal cells available to the policy."""
+    layers = np.asarray(observation).reshape(-1, grid_size, grid_size)
+    if layers.shape[0] < 5:
+        raise ValueError("Hazard extraction requires the observable enemy channel")
+    return np.logical_or(np.isclose(layers[3], 1.0), layers[4] > 0.5)
 
 
 def evaluate_trivial_policies(
@@ -629,10 +641,12 @@ def evaluate_trivial_policies(
         raise ValueError("num_rollouts must be at least 1")
 
     records = []
-    policies = [f"constant_{action}" for action in range(4)] + [
-        "random",
-        "safe_heuristic",
-    ]
+    policies = (
+        [f"constant_{action}" for action in range(4)]
+        + ["random", "masked_random"]
+        + [f"masked_constant_{action}" for action in range(4)]
+        + ["safe_heuristic"]
+    )
     for policy_index, policy_name in enumerate(policies):
         for map_index in range(num_maps):
             map_path = os.path.join(map_folder, f"map_{map_index:02d}.npz")
@@ -658,6 +672,20 @@ def evaluate_trivial_policies(
                             env.grid_size,
                             visit_counts,
                             action_rng,
+                        )
+                    elif policy_name == "masked_random":
+                        valid_actions = np.flatnonzero(
+                            observable_action_mask(obs, env.grid_size)
+                        )
+                        action = int(action_rng.choice(valid_actions))
+                    elif policy_name.startswith("masked_constant_"):
+                        preferred = int(policy_name[-1])
+                        action_mask = observable_action_mask(obs, env.grid_size)
+                        ranking = [preferred] + [
+                            action for action in range(4) if action != preferred
+                        ]
+                        action = next(
+                            action for action in ranking if action_mask[action]
                         )
                     elif policy_name == "random":
                         action = int(action_rng.integers(4))
