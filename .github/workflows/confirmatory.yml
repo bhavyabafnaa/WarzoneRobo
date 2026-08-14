@@ -1,0 +1,192 @@
+name: Confirmatory 40-seed experiment
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/confirmatory.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: confirmatory-pure-survival-v2
+  cancel-in-progress: false
+
+jobs:
+  run-seed:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[run-confirmatory]')
+    name: Seed ${{ matrix.seed }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        seed:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+          - 25
+          - 26
+          - 27
+          - 28
+          - 29
+          - 30
+          - 31
+          - 32
+          - 33
+          - 34
+          - 35
+          - 36
+          - 37
+          - 38
+          - 39
+    env:
+      MPLBACKEND: Agg
+      PYTHONUNBUFFERED: "1"
+      OUT_DIR: experiments/confirmatory-v2/shards/seed-${{ matrix.seed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r requirements.txt
+
+      - name: Train and evaluate one matched seed
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$OUT_DIR"
+          video_args=()
+          if [[ "${{ matrix.seed }}" == "0" ]]; then
+            video_args+=(--render-videos)
+          fi
+          python -u train.py \
+            --config configs/confirmatory.yaml \
+            --seeds "${{ matrix.seed }}" \
+            --defer-analysis \
+            --train-map-dir "$OUT_DIR/maps/train" \
+            --validation-map-dir "$OUT_DIR/maps/validation" \
+            --benchmark-map-dir "$OUT_DIR/maps/test" \
+            --results-dir "$OUT_DIR/results" \
+            --checkpoints-dir "$OUT_DIR/checkpoints" \
+            --plot-dir "$OUT_DIR/plots" \
+            --videos-dir "$OUT_DIR/videos" \
+            "${video_args[@]}" \
+            2>&1 | tee "$OUT_DIR/run.log"
+
+      - name: Upload seed artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirmatory-seed-${{ matrix.seed }}
+          path: |
+            ${{ env.OUT_DIR }}/results
+            ${{ env.OUT_DIR }}/checkpoints
+            ${{ env.OUT_DIR }}/videos
+            ${{ env.OUT_DIR }}/run.log
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 1
+
+      - name: Upload canonical maps
+        if: matrix.seed == 0 && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirmatory-maps
+          path: ${{ env.OUT_DIR }}/maps
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 1
+
+  merge-results:
+    name: Validate and merge 40 seeds
+    needs: run-seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r requirements.txt
+
+      - name: Download seed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: confirmatory-seed-*
+          path: downloaded-shards
+          merge-multiple: false
+
+      - name: Download canonical maps
+        uses: actions/download-artifact@v4
+        with:
+          name: confirmatory-maps
+          path: downloaded-shards/confirmatory-maps
+
+      - name: Merge and verify the complete protocol
+        run: |
+          python -m scripts.merge_confirmatory_shards \
+            --config configs/confirmatory.yaml \
+            --shards-dir downloaded-shards \
+            --output-dir experiments/confirmatory-v2 \
+            --require-videos
+
+      - name: Publish completeness summary
+        run: |
+          echo '## Confirmatory experiment inventory' >> "$GITHUB_STEP_SUMMARY"
+          echo '```yaml' >> "$GITHUB_STEP_SUMMARY"
+          cat experiments/confirmatory-v2/results/result_inventory.yaml \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload complete confirmatory package
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirmatory-v2-complete
+          path: experiments/confirmatory-v2
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 1

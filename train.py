@@ -148,6 +148,14 @@ def parse_args(argv=None):
     parser.add_argument("--plot-dir", default=None)
     parser.add_argument("--render-videos", action="store_true")
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument(
+        "--defer-analysis",
+        action="store_true",
+        help=(
+            "Write raw shard outputs without running cross-seed statistics; "
+            "use scripts/merge_confirmatory_shards.py after all shards finish"
+        ),
+    )
     parser.add_argument("--results-dir", default="results")
     parser.add_argument("--checkpoints-dir", default="checkpoints")
     parser.add_argument("--videos-dir", default="videos")
@@ -175,11 +183,15 @@ def set_seed(seed: int) -> None:
 
 
 def resolve_seeds(args) -> list[int]:
+    # An explicit CLI seed list must override a num_seeds value loaded from YAML.
+    # This makes it possible to run independent, reproducible seed shards.
+    if args.seeds:
+        return list(args.seeds)
     if args.num_seeds is not None:
         if args.num_seeds < 1:
             raise ValueError("--num-seeds must be at least 1")
         return list(range(args.num_seeds))
-    return list(args.seeds) if args.seeds else [args.seed]
+    return [args.seed]
 
 
 def sample_std(values: Iterable[float]) -> float:
@@ -876,6 +888,9 @@ def main(argv=None):
     write_run_view(runs, args, "validation_runs.csv", "Validation")
     write_run_view(runs, args, "test_runs.csv", "Test")
     write_run_view(runs, args, "greedy_test_runs.csv", "Greedy Test")
+
+    if args.defer_analysis:
+        return
 
     summaries = [
         (

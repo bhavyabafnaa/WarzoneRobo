@@ -149,6 +149,19 @@ outcomes:
 python train.py --config configs/confirmatory.yaml
 ```
 
+For the remote parallel run, open **Actions → Confirmatory 40-seed experiment →
+Run workflow**. GitHub executes one matched seed per job, with up to 20 jobs in
+parallel. Each seed artifact is saved independently, so a failed seed can be
+retried without repeating successful seeds. After all 40 jobs finish, the merge
+job checks all 240 variant--seed policies, raw episode counts, checkpoints,
+maps, and six canonical seed-0 rollout GIFs before publishing the downloadable
+`confirmatory-v2-complete` artifact.
+
+Shard jobs use `--defer-analysis`; their one-seed statistics are intentionally
+not treated as evidence. `scripts/merge_confirmatory_shards.py` computes the
+declared paired tests and interaction only after the complete 40-seed set has
+passed validation.
+
 ### Generated evidence
 
 After training, `train.py` evaluates each agent stochastically on validation
@@ -165,6 +178,8 @@ separately:
 * `results/confirmatory_decision.yaml`
 * `results/calibration_decision.yaml`
 * `results/protocol_manifest.yaml`
+* `results/result_inventory.yaml`
+* `results/*_summary.csv` and matching HTML tables
 
 Training CSVs label curriculum-horizon completion as `Curriculum Success` and
 record both the current `Training Horizon` and fixed

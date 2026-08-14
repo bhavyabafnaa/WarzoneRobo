@@ -1,4 +1,5 @@
 __pycache__/
+.venv/
 .ipynb_checkpoints/
 experiments/
 WarzoneRobo_corrected_results_*.zip
